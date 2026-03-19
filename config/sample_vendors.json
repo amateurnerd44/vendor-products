@@ -1,0 +1,143 @@
+[
+  {
+    "vendor_id": "vendor_001",
+    "vendor_name": "Acme Products",
+    "data_source_type": "drive",
+    "source_url": "https://drive.google.com/drive/folders/1ABC123XYZ_ACME",
+    "credentials": {
+      "type": "oauth2",
+      "refresh_token": "ENCRYPTED_TOKEN_ACME",
+      "client_id": "YOUR_GOOGLE_CLIENT_ID",
+      "client_secret": "ENCRYPTED_CLIENT_SECRET"
+    },
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 1,
+    "notes": "Products organized in subfolders by category. Images in /images, videos in /videos. Contact: sales@acmeproducts.com"
+  },
+  {
+    "vendor_id": "vendor_002",
+    "vendor_name": "Beta Supplies",
+    "data_source_type": "shopify",
+    "source_url": "https://beta-supplies.myshopify.com",
+    "credentials": null,
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 2,
+    "notes": "Public Shopify store, no credentials needed. Rate limit: 2 req/sec. Large catalog (~500 products)."
+  },
+  {
+    "vendor_id": "vendor_003",
+    "vendor_name": "Gamma Industries",
+    "data_source_type": "sheets",
+    "source_url": "https://docs.google.com/spreadsheets/d/GAMMA_SHEET_ID_123",
+    "credentials": {
+      "type": "oauth2",
+      "refresh_token": "ENCRYPTED_TOKEN_GAMMA",
+      "client_id": "YOUR_GOOGLE_CLIENT_ID",
+      "client_secret": "ENCRYPTED_CLIENT_SECRET"
+    },
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 1,
+    "notes": "Spreadsheet format: Column A=SKU, B=Product Name, C=Image URLs (comma-separated), D=Video URLs, E=Description. Header row included."
+  },
+  {
+    "vendor_id": "vendor_004",
+    "vendor_name": "Delta Manufacturing",
+    "data_source_type": "dropbox",
+    "source_url": "https://www.dropbox.com/sh/DELTA_FOLDER_789",
+    "credentials": {
+      "type": "access_token",
+      "token": "ENCRYPTED_DROPBOX_TOKEN_DELTA"
+    },
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 1,
+    "notes": "Files named with SKU prefix (e.g., DELTA-001-product-name.jpg). Product info in metadata.json file in each folder."
+  },
+  {
+    "vendor_id": "vendor_005",
+    "vendor_name": "Epsilon Wholesale",
+    "data_source_type": "website",
+    "source_url": "https://epsilon-wholesale.com/catalog",
+    "credentials": null,
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 3,
+    "notes": "Requires Zyte API + Gemini AI. Product pages follow pattern: /product/{sku}. Estimated 200 products. Cost: ~$0.40 per sync."
+  },
+  {
+    "vendor_id": "vendor_006",
+    "vendor_name": "Zeta Distributors",
+    "data_source_type": "shopify",
+    "source_url": "https://zeta-dist.myshopify.com",
+    "credentials": null,
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 2,
+    "notes": "Public Shopify store. Medium catalog (~150 products). Products have multiple variants - handle carefully."
+  },
+  {
+    "vendor_id": "vendor_007",
+    "vendor_name": "Eta Imports",
+    "data_source_type": "drive",
+    "source_url": "https://drive.google.com/drive/folders/1ETA_IMPORTS_456",
+    "credentials": {
+      "type": "oauth2",
+      "refresh_token": "ENCRYPTED_TOKEN_ETA",
+      "client_id": "YOUR_GOOGLE_CLIENT_ID",
+      "client_secret": "ENCRYPTED_CLIENT_SECRET"
+    },
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 1,
+    "notes": "Flat folder structure. Filename format: {SKU}_{product-name}_{image-number}.jpg. Product descriptions in descriptions.txt file."
+  },
+  {
+    "vendor_id": "vendor_008",
+    "vendor_name": "Theta Goods",
+    "data_source_type": "website",
+    "source_url": "https://thetagoods.com/products",
+    "credentials": {
+      "type": "basic_auth",
+      "username": "api_user",
+      "password": "ENCRYPTED_PASSWORD_THETA"
+    },
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 3,
+    "notes": "Requires authentication. Zyte API + Gemini AI needed. Estimated 100 products. JavaScript-heavy site, may need browser rendering."
+  },
+  {
+    "vendor_id": "vendor_009",
+    "vendor_name": "Iota Merchandise",
+    "data_source_type": "sheets",
+    "source_url": "https://docs.google.com/spreadsheets/d/IOTA_SHEET_ID_789",
+    "credentials": {
+      "type": "oauth2",
+      "refresh_token": "ENCRYPTED_TOKEN_IOTA",
+      "client_id": "YOUR_GOOGLE_CLIENT_ID",
+      "client_secret": "ENCRYPTED_CLIENT_SECRET"
+    },
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 1,
+    "notes": "Multi-sheet workbook. Products in 'Catalog' sheet. Pricing in 'Prices' sheet. Use VLOOKUP to combine data. Updates weekly on Mondays."
+  },
+  {
+    "vendor_id": "vendor_010",
+    "vendor_name": "Kappa Supplies Co",
+    "data_source_type": "dropbox",
+    "source_url": "https://www.dropbox.com/sh/KAPPA_FOLDER_321",
+    "credentials": {
+      "type": "access_token",
+      "token": "ENCRYPTED_DROPBOX_TOKEN_KAPPA"
+    },
+    "last_sync_date": null,
+    "sync_status": "pending",
+    "tier_used": 1,
+    "notes": "Organized by product category folders. Each product has its own subfolder with images, videos, and info.txt file. SKU in folder name."
+  }
+]
+

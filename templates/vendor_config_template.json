@@ -1,0 +1,80 @@
+{
+  "_comment": "Vendor Configuration Template - Use this as a base for adding new vendors",
+  "_instructions": "1. Copy this template, 2. Fill in all required fields, 3. Remove fields starting with underscore, 4. Import to n8n vendor_config table",
+  
+  "vendor_id": "vendor_XXX",
+  "_vendor_id_note": "Format: vendor_001, vendor_002, etc. Must be unique across all vendors",
+  
+  "vendor_name": "Vendor Company Name",
+  "_vendor_name_note": "Human-readable company name for reports and UI",
+  
+  "data_source_type": "drive|dropbox|sheets|shopify|website",
+  "_data_source_type_note": "Choose ONE: 'drive' (Google Drive), 'dropbox' (Dropbox), 'sheets' (Google Sheets), 'shopify' (Shopify store), 'website' (custom website)",
+  "_data_source_type_tier_mapping": {
+    "drive": "Tier 1 (FREE)",
+    "dropbox": "Tier 1 (FREE)",
+    "sheets": "Tier 1 (FREE)",
+    "shopify": "Tier 2 (FREE)",
+    "website": "Tier 3 (USAGE-BASED COST)"
+  },
+  
+  "source_url": "https://example.com/path/to/data",
+  "_source_url_note": "Full URL to the data source. Examples below:",
+  "_source_url_examples": {
+    "drive": "https://drive.google.com/drive/folders/ABC123XYZ",
+    "dropbox": "https://www.dropbox.com/sh/xyz789/folder",
+    "sheets": "https://docs.google.com/spreadsheets/d/SPREADSHEET_ID",
+    "shopify": "https://store-name.myshopify.com",
+    "website": "https://vendor-website.com/products"
+  },
+  
+  "credentials": {
+    "_note": "Credentials structure varies by data_source_type. Use appropriate format below. MUST BE ENCRYPTED in n8n!",
+    "_drive_sheets_format": {
+      "type": "oauth2",
+      "refresh_token": "ENCRYPTED_REFRESH_TOKEN",
+      "client_id": "YOUR_CLIENT_ID",
+      "client_secret": "ENCRYPTED_CLIENT_SECRET"
+    },
+    "_dropbox_format": {
+      "type": "access_token",
+      "token": "ENCRYPTED_ACCESS_TOKEN"
+    },
+    "_shopify_format": {
+      "type": "api_key",
+      "api_key": "ENCRYPTED_API_KEY",
+      "password": "ENCRYPTED_PASSWORD"
+    },
+    "_website_format": {
+      "type": "basic_auth",
+      "username": "USERNAME",
+      "password": "ENCRYPTED_PASSWORD"
+    },
+    "_or_null": "Set to null if using shared credentials or public access"
+  },
+  
+  "last_sync_date": null,
+  "_last_sync_date_note": "Leave as null for new vendors. Will be automatically updated after first sync. Format: ISO 8601 DateTime",
+  
+  "sync_status": "pending",
+  "_sync_status_note": "Valid values: 'pending', 'in_progress', 'success', 'failed'. Use 'pending' for new vendors",
+  
+  "tier_used": 1,
+  "_tier_used_note": "Must be 1, 2, or 3. Should match data_source_type: drive/dropbox/sheets=1, shopify=2, website=3",
+  "_tier_definitions": {
+    "1": "Direct integrations (Google Drive, Dropbox, Google Sheets) - FREE",
+    "2": "Shopify public JSON endpoints - FREE",
+    "3": "Zyte API + Gemini AI scraping - USAGE-BASED COST (~$0.002 per product)"
+  },
+  
+  "notes": "Additional notes about this vendor, special handling requirements, contact information, etc.",
+  "_notes_examples": [
+    "Products organized by category in subfolders",
+    "Contact: john@vendor.com for access issues",
+    "Requires VPN access",
+    "Sync only on weekends due to rate limits",
+    "Images in /images folder, videos in /videos folder",
+    "SKU format: VENDOR-CATEGORY-NUMBER"
+  ]
+}
+
