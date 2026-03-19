@@ -1,0 +1,279 @@
+{
+  "name": "Tier 1: Google Drive Scraper",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "folderId": "={{ $json.vendor_config.source_url }}",
+        "options": {
+          "fields": ["id", "name", "mimeType", "webViewLink", "webContentLink", "parents"]
+        }
+      },
+      "id": "list-drive-files",
+      "name": "List Drive Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [450, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "1",
+          "name": "Google Drive Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.mimeType }}",
+              "operation": "equals",
+              "value2": "application/vnd.google-apps.folder"
+            }
+          ]
+        }
+      },
+      "id": "filter-folders",
+      "name": "Filter Folders",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract SKU from folder name\n// Supports Pattern A: /products/{SKU}/ and Pattern B: flat {SKU}_image1.jpg\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const folderName = item.json.name;\n  const folderId = item.json.id;\n  const webViewLink = item.json.webViewLink;\n  \n  // Pattern A: Folder name is the SKU\n  let sku = folderName.trim().toUpperCase();\n  \n  // Check if this looks like a valid SKU (alphanumeric, dashes, underscores)\n  const skuPattern = /^[A-Z0-9_-]+$/;\n  \n  if (skuPattern.test(sku)) {\n    results.push({\n      json: {\n        sku: sku,\n        folder_id: folderId,\n        folder_name: folderName,\n        folder_link: webViewLink,\n        pattern_type: 'A',\n        source_tier: 1,\n        vendor_id: item.json.vendor_id || $('Start').first().json.vendor_id\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "extract-sku-from-folder",
+      "name": "Extract SKU from Folder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "operation": "list",
+        "folderId": "={{ $json.folder_id }}",
+        "options": {
+          "fields": ["id", "name", "mimeType", "webViewLink", "webContentLink", "thumbnailLink"]
+        }
+      },
+      "id": "list-folder-contents",
+      "name": "List Folder Contents",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1050, 200],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "1",
+          "name": "Google Drive Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Categorize files into images, videos, and documents\n// Generate shareable links\n\nconst items = $input.all();\nconst productData = {};\n\nfor (const item of items) {\n  const sku = item.json.sku;\n  const fileName = item.json.name;\n  const mimeType = item.json.mimeType;\n  const webContentLink = item.json.webContentLink;\n  const webViewLink = item.json.webViewLink;\n  \n  if (!productData[sku]) {\n    productData[sku] = {\n      sku: sku,\n      vendor_id: item.json.vendor_id,\n      image_urls: [],\n      video_urls: [],\n      document_urls: [],\n      source_tier: 1,\n      last_updated: new Date().toISOString()\n    };\n  }\n  \n  // Categorize by MIME type\n  if (mimeType.startsWith('image/')) {\n    productData[sku].image_urls.push({\n      url: webContentLink || webViewLink,\n      filename: fileName,\n      type: 'image'\n    });\n  } else if (mimeType.startsWith('video/')) {\n    productData[sku].video_urls.push({\n      url: webContentLink || webViewLink,\n      filename: fileName,\n      type: 'video'\n    });\n  } else if (mimeType.includes('document') || mimeType.includes('pdf') || mimeType.includes('text')) {\n    productData[sku].document_urls.push({\n      url: webViewLink,\n      filename: fileName,\n      type: 'document'\n    });\n  }\n}\n\n// Convert to array\nconst results = Object.values(productData).map(data => ({ json: data }));\n\nreturn results;"
+      },
+      "id": "categorize-files",
+      "name": "Categorize Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle Pattern B: Flat structure with {SKU}_filename.ext\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const fileName = item.json.name;\n  \n  // Pattern B: Extract SKU from filename (e.g., ABC123_image1.jpg)\n  const patternB = /^([A-Z0-9_-]+)_/i;\n  const match = fileName.match(patternB);\n  \n  if (match) {\n    const sku = match[1].toUpperCase();\n    const mimeType = item.json.mimeType;\n    const webContentLink = item.json.webContentLink;\n    const webViewLink = item.json.webViewLink;\n    \n    results.push({\n      json: {\n        sku: sku,\n        filename: fileName,\n        mime_type: mimeType,\n        url: webContentLink || webViewLink,\n        pattern_type: 'B',\n        vendor_id: item.json.vendor_id || $('Start').first().json.vendor_id\n      }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "extract-pattern-b",
+      "name": "Extract Pattern B SKUs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Group Pattern B files by SKU\n\nconst items = $input.all();\nconst productData = {};\n\nfor (const item of items) {\n  const sku = item.json.sku;\n  const mimeType = item.json.mime_type;\n  const url = item.json.url;\n  const filename = item.json.filename;\n  \n  if (!productData[sku]) {\n    productData[sku] = {\n      sku: sku,\n      vendor_id: item.json.vendor_id,\n      image_urls: [],\n      video_urls: [],\n      document_urls: [],\n      source_tier: 1,\n      pattern_type: 'B',\n      last_updated: new Date().toISOString()\n    };\n  }\n  \n  // Categorize by MIME type\n  if (mimeType.startsWith('image/')) {\n    productData[sku].image_urls.push({\n      url: url,\n      filename: filename,\n      type: 'image'\n    });\n  } else if (mimeType.startsWith('video/')) {\n    productData[sku].video_urls.push({\n      url: url,\n      filename: filename,\n      type: 'video'\n    });\n  } else if (mimeType.includes('document') || mimeType.includes('pdf') || mimeType.includes('text')) {\n    productData[sku].document_urls.push({\n      url: url,\n      filename: filename,\n      type: 'document'\n    });\n  }\n}\n\n// Convert to array\nconst results = Object.values(productData).map(data => ({ json: data }));\n\nreturn results;"
+      },
+      "id": "group-pattern-b",
+      "name": "Group Pattern B Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {},
+      "id": "merge-patterns",
+      "name": "Merge Both Patterns",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract marketing copy from documents\n// This is a placeholder - in production, you'd read the document content\n\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const productData = { ...item.json };\n  \n  // If there are document URLs, note that marketing copy should be extracted\n  if (productData.document_urls && productData.document_urls.length > 0) {\n    productData.marketing_copy_source = productData.document_urls[0].url;\n    productData.marketing_copy = 'Marketing copy available in document. Extract manually or use AI.';\n  } else {\n    productData.marketing_copy = '';\n  }\n  \n  // Add metadata\n  productData.metadata = {\n    total_images: productData.image_urls.length,\n    total_videos: productData.video_urls.length,\n    total_documents: productData.document_urls.length,\n    pattern_type: productData.pattern_type || 'A',\n    source: 'google_drive'\n  };\n  \n  results.push({ json: productData });\n}\n\nreturn results;"
+      },
+      "id": "extract-marketing-copy",
+      "name": "Extract Marketing Copy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "product_data",
+        "matchFields": ["sku"],
+        "dataToInsert": "={{ $json }}"
+      },
+      "id": "save-to-table",
+      "name": "Save to Product Data Table",
+      "type": "n8n-nodes-base.n8nDataTable",
+      "typeVersion": 1,
+      "position": [1850, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "List Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Drive Files": {
+      "main": [
+        [
+          {
+            "node": "Filter Folders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Folders": {
+      "main": [
+        [
+          {
+            "node": "Extract SKU from Folder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Pattern B SKUs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract SKU from Folder": {
+      "main": [
+        [
+          {
+            "node": "List Folder Contents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Folder Contents": {
+      "main": [
+        [
+          {
+            "node": "Categorize Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Files": {
+      "main": [
+        [
+          {
+            "node": "Merge Both Patterns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Pattern B SKUs": {
+      "main": [
+        [
+          {
+            "node": "Group Pattern B Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Group Pattern B Files": {
+      "main": [
+        [
+          {
+            "node": "Merge Both Patterns",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Both Patterns": {
+      "main": [
+        [
+          {
+            "node": "Extract Marketing Copy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Marketing Copy": {
+      "main": [
+        [
+          {
+            "node": "Save to Product Data Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "tier1",
+      "id": "1"
+    },
+    {
+      "name": "scraper",
+      "id": "2"
+    }
+  ],
+  "meta": {
+    "instanceId": "n8n-cloud"
+  }
+}
+
