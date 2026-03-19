@@ -1,0 +1,259 @@
+{
+  "name": "Flow 2: MarketTime Email Trigger",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute",
+              "minute": 5
+            }
+          ]
+        },
+        "mailbox": "INBOX",
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "id": "imap-trigger",
+      "name": "IMAP Email Monitor",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "notes": "Check for new emails every 5 minutes",
+      "credentials": {
+        "imap": {
+          "id": "1",
+          "name": "MarketTime Email Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.from }}",
+              "operation": "contains",
+              "value2": "orders@markettime.com"
+            },
+            {
+              "value1": "={{ $json.subject }}",
+              "operation": "contains",
+              "value2": "Order Confirmation"
+            }
+          ]
+        },
+        "combineOperation": "all"
+      },
+      "id": "filter-markettime-orders",
+      "name": "Filter MarketTime Orders",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "notes": "Only process MarketTime order confirmation emails"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse MarketTime order confirmation email\nconst email = $input.first().json;\nconst subject = email.subject || '';\nconst body = email.text || email.html || '';\n\n// Extract order number from subject\nconst orderMatch = subject.match(/Order Confirmation #(\\d+)/);\nconst orderNumber = orderMatch ? orderMatch[1] : null;\n\nif (!orderNumber) {\n  throw new Error('Could not extract order number from subject: ' + subject);\n}\n\n// Extract customer info\nconst customerNameMatch = body.match(/Customer:\\s*([^\\n]+)/);\nconst customerEmailMatch = body.match(/Email:\\s*([^\\n]+)/);\nconst orderDateMatch = body.match(/Order Date:\\s*([^\\n]+)/);\n\nconst customerName = customerNameMatch ? customerNameMatch[1].trim() : 'Unknown';\nconst customerEmail = customerEmailMatch ? customerEmailMatch[1].trim() : null;\nconst orderDate = orderDateMatch ? orderDateMatch[1].trim() : new Date().toISOString().split('T')[0];\n\n// Extract line items\n// Expected format:\n// Items:\n// - SKU: ACME-12345, Qty: 2, Vendor: Acme Products\n// - SKU: BETA-789, Qty: 1, Vendor: Beta Supplies\n\nconst itemsSection = body.match(/Items:([\\s\\S]*?)(?:Total:|$)/);\nconst itemsText = itemsSection ? itemsSection[1] : '';\n\nconst lineItemRegex = /SKU:\\s*([^,]+),\\s*Qty:\\s*(\\d+)(?:,\\s*Vendor:\\s*([^\\n]+))?/gi;\nconst items = [];\nlet match;\n\nwhile ((match = lineItemRegex.exec(itemsText)) !== null) {\n  items.push({\n    sku: match[1].trim(),\n    quantity: parseInt(match[2]),\n    vendor: match[3] ? match[3].trim() : 'Unknown'\n  });\n}\n\nif (items.length === 0) {\n  throw new Error('No line items found in email body');\n}\n\n// Create standardized order object\nconst order = {\n  order_id: `MT-${orderNumber}`,\n  source: 'markettime',\n  customer_name: customerName,\n  customer_email: customerEmail,\n  order_date: orderDate,\n  items: items,\n  total_items: items.length,\n  total_quantity: items.reduce((sum, item) => sum + item.quantity, 0),\n  raw_email_subject: subject,\n  raw_email_from: email.from,\n  parsed_at: new Date().toISOString()\n};\n\nreturn [{ json: order }];"
+      },
+      "id": "parse-order-email",
+      "name": "Parse Order Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 250],
+      "notes": "Extract order details from email body",
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate parsed order data\nconst order = $input.first().json;\nconst errors = [];\n\n// Required fields validation\nif (!order.order_id) errors.push('Missing order_id');\nif (!order.customer_email) errors.push('Missing customer_email');\nif (!order.items || order.items.length === 0) errors.push('No items in order');\n\n// Email validation\nif (order.customer_email && !order.customer_email.match(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/)) {\n  errors.push('Invalid customer email format');\n}\n\n// SKU validation\nfor (const item of order.items || []) {\n  if (!item.sku) errors.push(`Item missing SKU: ${JSON.stringify(item)}`);\n  if (!item.quantity || item.quantity < 1) errors.push(`Invalid quantity for SKU ${item.sku}`);\n}\n\nif (errors.length > 0) {\n  return [{\n    json: {\n      ...order,\n      validation_failed: true,\n      validation_errors: errors,\n      error_message: errors.join('; ')\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...order,\n    validation_passed: true\n  }\n}];"
+      },
+      "id": "validate-order",
+      "name": "Validate Order Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 250],
+      "notes": "Validate required fields and data format"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.validation_passed }}",
+              "operation": "equals",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-validation",
+      "name": "Validation Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "notes": "Route based on validation result"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/flow2-fulfillment",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "order",
+              "value": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        }
+      },
+      "id": "trigger-fulfillment",
+      "name": "Trigger Fulfillment Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 200],
+      "notes": "Send validated order to fulfillment workflow"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle parsing/validation errors\nconst failedOrder = $input.first().json;\nconst originalEmail = $node['IMAP Email Monitor'].json;\n\nreturn [{\n  json: {\n    error_type: 'order_parsing_failed',\n    order_id: failedOrder.order_id || 'UNKNOWN',\n    customer_email: failedOrder.customer_email || 'UNKNOWN',\n    validation_errors: failedOrder.validation_errors || [],\n    email_subject: originalEmail.subject,\n    email_from: originalEmail.from,\n    email_date: originalEmail.date,\n    timestamp: new Date().toISOString(),\n    action_required: 'Manual review and processing needed'\n  }\n}];"
+      },
+      "id": "prepare-error-alert",
+      "name": "Prepare Error Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 350],
+      "notes": "Prepare error notification for admin"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.ADMIN_EMAIL }}",
+        "toEmail": "={{ $env.ADMIN_EMAIL }}",
+        "subject": "MarketTime Order Parsing Failed - {{ $json.order_id }}",
+        "emailFormat": "html",
+        "text": "=<h2>Order Fulfillment Error</h2>\n<p><strong>Error Type:</strong> {{ $json.error_type }}</p>\n<p><strong>Order ID:</strong> {{ $json.order_id }}</p>\n<p><strong>Customer Email:</strong> {{ $json.customer_email }}</p>\n<p><strong>Validation Errors:</strong></p>\n<ul>\n{{ $json.validation_errors.map(e => '<li>' + e + '</li>').join('') }}\n</ul>\n<p><strong>Original Email:</strong></p>\n<ul>\n<li><strong>Subject:</strong> {{ $json.email_subject }}</li>\n<li><strong>From:</strong> {{ $json.email_from }}</li>\n<li><strong>Date:</strong> {{ $json.email_date }}</li>\n</ul>\n<p><strong>Action Required:</strong> {{ $json.action_required }}</p>\n<p><strong>Timestamp:</strong> {{ $json.timestamp }}</p>",
+        "options": {}
+      },
+      "id": "send-admin-alert",
+      "name": "Send Admin Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1450, 350],
+      "notes": "Alert admin about parsing failure",
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "Admin Email SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle emails that don't match MarketTime pattern\nconst email = $input.first().json;\n\nreturn [{\n  json: {\n    skipped: true,\n    reason: 'Not a MarketTime order confirmation',\n    email_from: email.from,\n    email_subject: email.subject,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "log-skipped",
+      "name": "Log Skipped Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "notes": "Log non-MarketTime emails for debugging"
+    }
+  ],
+  "connections": {
+    "IMAP Email Monitor": {
+      "main": [
+        [
+          {
+            "node": "Filter MarketTime Orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter MarketTime Orders": {
+      "main": [
+        [
+          {
+            "node": "Parse Order Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Skipped Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Order Email": {
+      "main": [
+        [
+          {
+            "node": "Validate Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Order Data": {
+      "main": [
+        [
+          {
+            "node": "Validation Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Passed?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Fulfillment Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Admin Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-19T17:00:00.000Z",
+  "versionId": "1"
+}
+

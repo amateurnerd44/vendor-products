@@ -1,0 +1,85 @@
+{
+  "name": "Flow 2: Digital Asset Package Compiler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flow2-asset-compiler",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Asset Compiler Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "flow2-asset-compiler",
+      "notes": "Receives product data from fulfillment workflow"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract order and product data\nconst body = $input.first().json.body;\nconst order = body.order || {};\nconst products = body.products || [];\n\nif (products.length === 0) {\n  throw new Error('No products provided for asset compilation');\n}\n\n// Create individual items for each product\nreturn products.map(product => ({\n  json: {\n    ...product,\n    order_id: order.order_id,\n    customer_name: order.customer_name,\n    customer_email: order.customer_email\n  }\n}));"
+      },
+      "id": "extract-products",
+      "name": "Extract Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Split products into individual items"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Compile digital assets for each product\nconst product = $input.first().json;\n\n// Parse image and video URLs\nlet imageUrls = [];\nlet videoUrls = [];\n\ntry {\n  if (product.image_urls) {\n    imageUrls = Array.isArray(product.image_urls) ? product.image_urls : JSON.parse(product.image_urls);\n  }\n} catch (e) {\n  console.error('Failed to parse image_urls:', e);\n}\n\ntry {\n  if (product.video_urls) {\n    videoUrls = Array.isArray(product.video_urls) ? product.video_urls : JSON.parse(product.video_urls);\n  }\n} catch (e) {\n  console.error('Failed to parse video_urls:', e);\n}\n\n// Convert HTML description to plain text\nconst stripHtml = (html) => {\n  if (!html) return '';\n  return html.replace(/<[^>]*>/g, '').replace(/\\s+/g, ' ').trim();\n};\n\nconst plainDescription = stripHtml(product.description || product.Copy_html);\n\nreturn [{\n  json: {\n    sku: product.sku,\n    name: product.name || product.Name,\n    quantity: product.quantity || 1,\n    images: imageUrls,\n    videos: videoUrls,\n    description: plainDescription,\n    description_html: product.description || product.Copy_html,\n    tagline: product.tagline || product.Tagline,\n    order_id: product.order_id,\n    customer_name: product.customer_name,\n    customer_email: product.customer_email,\n    asset_count: imageUrls.length + videoUrls.length,\n    compiled_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "compile-assets",
+      "name": "Compile Product Assets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "notes": "Extract and format digital assets"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate all products into a single package\nconst allProducts = $input.all();\n\nif (allProducts.length === 0) {\n  throw new Error('No products to package');\n}\n\nconst firstProduct = allProducts[0].json;\n\nconst packageData = {\n  order_id: firstProduct.order_id,\n  customer: {\n    name: firstProduct.customer_name,\n    email: firstProduct.customer_email\n  },\n  products: allProducts.map(p => p.json),\n  total_products: allProducts.length,\n  total_assets: allProducts.reduce((sum, p) => sum + (p.json.asset_count || 0), 0),\n  package_created_at: new Date().toISOString()\n};\n\nreturn [{ json: packageData }];"
+      },
+      "id": "create-package",
+      "name": "Create Asset Package",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Aggregate all products into delivery package"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-package",
+      "name": "Respond with Package",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "notes": "Return compiled package to caller"
+    }
+  ],
+  "connections": {
+    "Asset Compiler Webhook": {
+      "main": [[{"node": "Extract Products", "type": "main", "index": 0}]]
+    },
+    "Extract Products": {
+      "main": [[{"node": "Compile Product Assets", "type": "main", "index": 0}]]
+    },
+    "Compile Product Assets": {
+      "main": [[{"node": "Create Asset Package", "type": "main", "index": 0}]]
+    },
+    "Create Asset Package": {
+      "main": [[{"node": "Respond with Package", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-19T17:00:00.000Z",
+  "versionId": "1"
+}

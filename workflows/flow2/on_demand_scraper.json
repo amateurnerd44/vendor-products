@@ -1,0 +1,608 @@
+{
+  "name": "Flow 2: On-Demand Scraper",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flow2-on-demand-scraper",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "id": "webhook-trigger",
+      "name": "On-Demand Scraper Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "flow2-on-demand-scraper",
+      "notes": "Receives missing SKUs from fulfillment workflow"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract missing SKUs and order context\nconst body = $input.first().json.body;\nconst missingSkus = body.missing_skus || [];\nconst orderContext = body.order_context || {};\n\nif (!Array.isArray(missingSkus) || missingSkus.length === 0) {\n  return [{\n    json: {\n      scraped_products: [],\n      failed_skus: [],\n      scraping_duration: 0,\n      message: 'No missing SKUs to scrape'\n    }\n  }];\n}\n\n// Create individual items for each missing SKU\nreturn missingSkus.map(sku => ({\n  json: {\n    sku: sku,\n    order_id: orderContext.order_id,\n    scrape_start: new Date().toISOString()\n  }\n}));"
+      },
+      "id": "extract-missing-skus",
+      "name": "Extract Missing SKUs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Split missing SKUs into individual items"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "vendor_config",
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "load-vendor-config",
+      "name": "Load Vendor Config",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "notes": "Load all vendor configurations"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Match SKU to vendor based on SKU pattern or vendor name\nconst sku = $node['Extract Missing SKUs'].json.sku;\nconst vendors = $input.all().map(v => v.json);\n\n// Try to match vendor by SKU prefix pattern\nlet matchedVendor = null;\n\nfor (const vendor of vendors) {\n  // Check if vendor has SKU prefix pattern\n  if (vendor.sku_prefix && sku.startsWith(vendor.sku_prefix)) {\n    matchedVendor = vendor;\n    break;\n  }\n  \n  // Check if vendor name is in SKU\n  if (vendor.vendor_name && sku.toLowerCase().includes(vendor.vendor_name.toLowerCase().replace(/\\s+/g, '-'))) {\n    matchedVendor = vendor;\n    break;\n  }\n}\n\nif (!matchedVendor) {\n  return [{\n    json: {\n      sku: sku,\n      vendor_found: false,\n      error: `Cannot determine vendor for SKU: ${sku}`,\n      scrape_failed: true\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    sku: sku,\n    vendor_found: true,\n    vendor_id: matchedVendor.vendor_id,\n    vendor_name: matchedVendor.vendor_name,\n    tier_used: matchedVendor.tier_used,\n    data_source_type: matchedVendor.data_source_type,\n    data_source_url: matchedVendor.data_source_url,\n    scrape_start: $node['Extract Missing SKUs'].json.scrape_start\n  }\n}];"
+      },
+      "id": "match-vendor",
+      "name": "Match SKU to Vendor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Determine which vendor owns this SKU"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.vendor_found }}",
+              "operation": "equals",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-vendor-found",
+      "name": "Vendor Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "notes": "Check if we found a matching vendor"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.tier_used }}",
+              "operation": "equals",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "route-tier1",
+      "name": "Tier 1?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "notes": "Route to appropriate tier scraper"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.tier_used }}",
+              "operation": "equals",
+              "value2": 2
+            }
+          ]
+        }
+      },
+      "id": "route-tier2",
+      "name": "Tier 2?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "notes": "Route to Shopify scraper"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.tier_used }}",
+              "operation": "equals",
+              "value2": 3
+            }
+          ]
+        }
+      },
+      "id": "route-tier3",
+      "name": "Tier 3?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "notes": "Route to Zyte+AI scraper"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/tier1-on-demand",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sku",
+              "value": "={{ $json.sku }}"
+            },
+            {
+              "name": "vendor_id",
+              "value": "={{ $json.vendor_id }}"
+            },
+            {
+              "name": "data_source_type",
+              "value": "={{ $json.data_source_type }}"
+            },
+            {
+              "name": "data_source_url",
+              "value": "={{ $json.data_source_url }}"
+            }
+          ]
+        }
+      },
+      "id": "call-tier1-scraper",
+      "name": "Call Tier 1 Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 150],
+      "notes": "Scrape from Drive/Dropbox/Sheets",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/tier2-shopify-single",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sku",
+              "value": "={{ $json.sku }}"
+            },
+            {
+              "name": "vendor_id",
+              "value": "={{ $json.vendor_id }}"
+            },
+            {
+              "name": "shopify_url",
+              "value": "={{ $json.data_source_url }}"
+            }
+          ]
+        }
+      },
+      "id": "call-tier2-scraper",
+      "name": "Call Tier 2 Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 300],
+      "notes": "Scrape single product from Shopify",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/tier3-zyte-single",
+        "options": {
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "sku",
+              "value": "={{ $json.sku }}"
+            },
+            {
+              "name": "vendor_id",
+              "value": "={{ $json.vendor_id }}"
+            },
+            {
+              "name": "product_url",
+              "value": "={{ $json.data_source_url }}"
+            }
+          ]
+        }
+      },
+      "id": "call-tier3-scraper",
+      "name": "Call Tier 3 Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 450],
+      "notes": "Scrape with Zyte+AI (60s timeout)",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process scraper response\nconst response = $input.first().json;\nconst originalSku = $node['Match SKU to Vendor'].json.sku;\nconst vendorId = $node['Match SKU to Vendor'].json.vendor_id;\nconst tier = $node['Match SKU to Vendor'].json.tier_used;\nconst scrapeStart = new Date($node['Match SKU to Vendor'].json.scrape_start);\nconst scrapeEnd = new Date();\nconst duration = scrapeEnd - scrapeStart;\n\n// Check if scraping succeeded\nif (response.error || !response.sku) {\n  return [{\n    json: {\n      sku: originalSku,\n      scrape_success: false,\n      error: response.error || 'Unknown scraping error',\n      duration_ms: duration,\n      tier_used: tier\n    }\n  }];\n}\n\n// Scraping succeeded - prepare product data\nreturn [{\n  json: {\n    ...response,\n    sku: response.sku || originalSku,\n    vendor_id: vendorId,\n    source_tier: tier,\n    scrape_success: true,\n    duration_ms: duration,\n    scraped_at: scrapeEnd.toISOString()\n  }\n}];"
+      },
+      "id": "process-tier1-response",
+      "name": "Process Tier 1 Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 150],
+      "notes": "Process Tier 1 scraper response"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process scraper response\nconst response = $input.first().json;\nconst originalSku = $node['Match SKU to Vendor'].json.sku;\nconst vendorId = $node['Match SKU to Vendor'].json.vendor_id;\nconst tier = $node['Match SKU to Vendor'].json.tier_used;\nconst scrapeStart = new Date($node['Match SKU to Vendor'].json.scrape_start);\nconst scrapeEnd = new Date();\nconst duration = scrapeEnd - scrapeStart;\n\n// Check if scraping succeeded\nif (response.error || !response.sku) {\n  return [{\n    json: {\n      sku: originalSku,\n      scrape_success: false,\n      error: response.error || 'Unknown scraping error',\n      duration_ms: duration,\n      tier_used: tier\n    }\n  }];\n}\n\n// Scraping succeeded - prepare product data\nreturn [{\n  json: {\n    ...response,\n    sku: response.sku || originalSku,\n    vendor_id: vendorId,\n    source_tier: tier,\n    scrape_success: true,\n    duration_ms: duration,\n    scraped_at: scrapeEnd.toISOString()\n  }\n}];"
+      },
+      "id": "process-tier2-response",
+      "name": "Process Tier 2 Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "notes": "Process Tier 2 scraper response"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process scraper response\nconst response = $input.first().json;\nconst originalSku = $node['Match SKU to Vendor'].json.sku;\nconst vendorId = $node['Match SKU to Vendor'].json.vendor_id;\nconst tier = $node['Match SKU to Vendor'].json.tier_used;\nconst scrapeStart = new Date($node['Match SKU to Vendor'].json.scrape_start);\nconst scrapeEnd = new Date();\nconst duration = scrapeEnd - scrapeStart;\n\n// Check if scraping succeeded\nif (response.error || !response.sku) {\n  return [{\n    json: {\n      sku: originalSku,\n      scrape_success: false,\n      error: response.error || 'Unknown scraping error',\n      duration_ms: duration,\n      tier_used: tier\n    }\n  }];\n}\n\n// Scraping succeeded - prepare product data\nreturn [{\n  json: {\n    ...response,\n    sku: response.sku || originalSku,\n    vendor_id: vendorId,\n    source_tier: tier,\n    scrape_success: true,\n    duration_ms: duration,\n    scraped_at: scrapeEnd.toISOString()\n  }\n}];"
+      },
+      "id": "process-tier3-response",
+      "name": "Process Tier 3 Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 450],
+      "notes": "Process Tier 3 scraper response"
+    },
+    {
+      "parameters": {},
+      "id": "merge-scrape-results",
+      "name": "Merge Scrape Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1850, 300],
+      "notes": "Combine results from all tiers"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.scrape_success }}",
+              "operation": "equals",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-scrape-success",
+      "name": "Scrape Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2050, 300],
+      "notes": "Check if scraping was successful"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "product_data",
+        "dataMode": "autoMapInputData"
+      },
+      "id": "save-to-database",
+      "name": "Save to Database",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [2250, 250],
+      "notes": "Save scraped product to database",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Mark as failed scrape\nconst failedItem = $input.first().json;\n\nreturn [{\n  json: {\n    ...failedItem,\n    saved_to_db: false\n  }\n}];"
+      },
+      "id": "mark-failed",
+      "name": "Mark as Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 400],
+      "notes": "Mark scraping as failed"
+    },
+    {
+      "parameters": {},
+      "id": "merge-final-results",
+      "name": "Merge Final Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [2450, 300],
+      "notes": "Combine successful and failed results"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate on-demand scraping results\nconst allResults = $input.all();\n\nconst scrapedProducts = allResults.filter(r => r.json.scrape_success);\nconst failedSkus = allResults.filter(r => !r.json.scrape_success).map(r => r.json.sku);\n\nconst totalDuration = allResults.reduce((sum, r) => sum + (r.json.duration_ms || 0), 0);\nconst avgDuration = allResults.length > 0 ? totalDuration / allResults.length : 0;\n\nreturn [{\n  json: {\n    scraped_products: scrapedProducts.map(p => p.json),\n    failed_skus: failedSkus,\n    total_attempted: allResults.length,\n    successful_scrapes: scrapedProducts.length,\n    failed_scrapes: failedSkus.length,\n    success_rate: allResults.length > 0 ? (scrapedProducts.length / allResults.length) : 0,\n    total_duration_ms: totalDuration,\n    avg_duration_ms: avgDuration,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2650, 300],
+      "notes": "Calculate scraping statistics"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-results",
+      "name": "Respond with Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2850, 300],
+      "notes": "Return scraping results to caller"
+    }
+  ],
+  "connections": {
+    "On-Demand Scraper Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract Missing SKUs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Missing SKUs": {
+      "main": [
+        [
+          {
+            "node": "Load Vendor Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Vendor Config": {
+      "main": [
+        [
+          {
+            "node": "Match SKU to Vendor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match SKU to Vendor": {
+      "main": [
+        [
+          {
+            "node": "Vendor Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vendor Found?": {
+      "main": [
+        [
+          {
+            "node": "Tier 1?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tier 2?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tier 3?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Final Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Tier 1?": {
+      "main": [
+        [
+          {
+            "node": "Call Tier 1 Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tier 2?": {
+      "main": [
+        [
+          {
+            "node": "Call Tier 2 Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tier 3?": {
+      "main": [
+        [
+          {
+            "node": "Call Tier 3 Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Tier 1 Scraper": {
+      "main": [
+        [
+          {
+            "node": "Process Tier 1 Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Tier 2 Scraper": {
+      "main": [
+        [
+          {
+            "node": "Process Tier 2 Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Tier 3 Scraper": {
+      "main": [
+        [
+          {
+            "node": "Process Tier 3 Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Tier 1 Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Scrape Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Tier 2 Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Scrape Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Process Tier 3 Response": {
+      "main": [
+        [
+          {
+            "node": "Merge Scrape Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Scrape Results": {
+      "main": [
+        [
+          {
+            "node": "Scrape Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Save to Database",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Database": {
+      "main": [
+        [
+          {
+            "node": "Merge Final Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Failed": {
+      "main": [
+        [
+          {
+            "node": "Merge Final Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Final Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Respond with Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-19T17:00:00.000Z",
+  "versionId": "1"
+}
+

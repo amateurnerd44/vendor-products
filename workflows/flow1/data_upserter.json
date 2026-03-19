@@ -11,14 +11,14 @@
     },
     {
       "parameters": {
-        "functionCode": "// Receive products from scraper\nconst products = $input.all();\nconst vendorId = products[0]?.json?.vendor_id;\nconst markettimeSKUs = $workflow.staticData.markettime_skus || [];\n\n// Add metadata to each product\nreturn products.map(product => ({\n  json: {\n    ...product.json,\n    is_new_markettime_item: markettimeSKUs.includes(product.json.sku),\n    upsert_timestamp: new Date().toISOString()\n  }\n}));"
+        "functionCode": "// Receive products from scraper\nconst products = $input.all();\nconst vendorId = products[0]?.json?.vendor_id;\nconst vendorTier = products[0]?.json?.vendor_tier || products[0]?.json?.tier_used;\nconst markettimeSKUs = $workflow.staticData.markettime_skus || [];\n\n// Add metadata to each product including Phase 6 fields\nreturn products.map(product => {\n  const productData = product.json;\n  \n  // Extract image URLs from various possible sources\n  let imageUrls = [];\n  if (productData.images && Array.isArray(productData.images)) {\n    imageUrls = productData.images.map(img => typeof img === 'string' ? img : img.src || img.url);\n  } else if (productData.image_urls && Array.isArray(productData.image_urls)) {\n    imageUrls = productData.image_urls;\n  } else if (productData.image_url) {\n    imageUrls = [productData.image_url];\n  }\n  \n  // Extract video URLs from various possible sources\n  let videoUrls = [];\n  if (productData.videos && Array.isArray(productData.videos)) {\n    videoUrls = productData.videos.map(vid => typeof vid === 'string' ? vid : vid.src || vid.url);\n  } else if (productData.video_urls && Array.isArray(productData.video_urls)) {\n    videoUrls = productData.video_urls;\n  } else if (productData.video_url) {\n    videoUrls = [productData.video_url];\n  }\n  \n  return {\n    json: {\n      ...productData,\n      // Phase 6 new fields\n      image_urls: imageUrls.length > 0 ? JSON.stringify(imageUrls) : null,\n      video_urls: videoUrls.length > 0 ? JSON.stringify(videoUrls) : null,\n      vendor_id: vendorId || productData.vendor_id || null,\n      source_tier: vendorTier || productData.source_tier || null,\n      // Existing metadata\n      is_new_markettime_item: markettimeSKUs.includes(productData.sku || productData.SKU),\n      upsert_timestamp: new Date().toISOString()\n    }\n  };\n});"
       },
       "id": "prepare-products",
       "name": "Prepare Products",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [450, 300],
-      "notes": "Add metadata and check against MarketTime list"
+      "notes": "Add metadata and Phase 6 fields (image_urls, video_urls, vendor_id, source_tier)"
     },
     {
       "parameters": {
@@ -376,4 +376,3 @@
   "updatedAt": "2026-03-19T16:26:00.000Z",
   "versionId": "1"
 }
-
