@@ -1,0 +1,7 @@
+vendor_id,vendor_name,data_source_type,source_url,tier_used,notes
+vendor_001,Acme Products,drive,https://drive.google.com/drive/folders/FOLDER_ID_HERE,1,Products organized by SKU in subfolders
+vendor_002,Beta Supplies,shopify,https://beta-supplies.myshopify.com,2,Uses public /products.json endpoint
+vendor_003,Gamma Industries,sheets,https://docs.google.com/spreadsheets/d/SHEET_ID_HERE,1,Product catalog in Sheet1 with columns: SKU | Name | Images | Videos | Description
+vendor_004,Delta Manufacturing,dropbox,https://www.dropbox.com/sh/SHARED_FOLDER_ID,1,Folder structure: /products/{SKU}/images and /products/{SKU}/videos
+vendor_005,Epsilon Wholesale,website,https://epsilon-wholesale.com/products,3,Requires Zyte + AI extraction - no public API
+
