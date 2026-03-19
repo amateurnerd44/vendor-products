@@ -1,0 +1,375 @@
+{
+  "name": "Tier 3: Zyte Fetcher",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "url-input",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "max-retries",
+              "name": "maxRetries",
+              "value": "={{ $json.maxRetries || 3 }}",
+              "type": "number"
+            },
+            {
+              "id": "retry-count",
+              "name": "retryCount",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "set-variables",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.zyte.com/v1/extract",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "zyteApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $json.url }}"
+            },
+            {
+              "name": "browserHtml",
+              "value": true
+            },
+            {
+              "name": "javascript",
+              "value": true
+            },
+            {
+              "name": "screenshot",
+              "value": false
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000,
+          "retry": {
+            "maxRetries": 0
+          }
+        }
+      },
+      "id": "zyte-api-request",
+      "name": "Zyte API Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300],
+      "notes": "Fetches rendered HTML from Zyte API with JavaScript execution enabled"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-response",
+      "name": "Check Response",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "html-output",
+              "name": "html",
+              "value": "={{ $json.browserHtml }}",
+              "type": "string"
+            },
+            {
+              "id": "url-output",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "success-flag",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "timestamp",
+              "name": "fetchedAt",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "cost",
+              "name": "cost",
+              "value": 0.00013,
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "format-success",
+      "name": "Format Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "retry-check",
+              "leftValue": "={{ $('Set Variables').item.json.retryCount }}",
+              "rightValue": "={{ $('Set Variables').item.json.maxRetries }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-retry",
+      "name": "Should Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "increment-retry",
+              "name": "retryCount",
+              "value": "={{ $('Set Variables').item.json.retryCount + 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "url-retry",
+              "name": "url",
+              "value": "={{ $('Set Variables').item.json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "max-retries-retry",
+              "name": "maxRetries",
+              "value": "={{ $('Set Variables').item.json.maxRetries }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "increment-retry-count",
+      "name": "Increment Retry Count",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1250, 350]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.pow(2, $('Set Variables').item.json.retryCount) }}",
+        "unit": "seconds"
+      },
+      "id": "exponential-backoff",
+      "name": "Exponential Backoff",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1450, 350],
+      "webhookId": "zyte-retry-wait"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error-output",
+              "name": "success",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "error-message",
+              "name": "error",
+              "value": "={{ $json.error || 'Zyte API request failed after ' + $('Set Variables').item.json.maxRetries + ' retries' }}",
+              "type": "string"
+            },
+            {
+              "id": "url-error",
+              "name": "url",
+              "value": "={{ $('Set Variables').item.json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "retry-count-error",
+              "name": "retriesAttempted",
+              "value": "={{ $('Set Variables').item.json.retryCount }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "format-error",
+      "name": "Format Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1250, 500]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Zyte API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zyte API Request": {
+      "main": [
+        [
+          {
+            "node": "Check Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Response": {
+      "main": [
+        [
+          {
+            "node": "Format Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Should Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Retry?": {
+      "main": [
+        [
+          {
+            "node": "Increment Retry Count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Retry Count": {
+      "main": [
+        [
+          {
+            "node": "Exponential Backoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exponential Backoff": {
+      "main": [
+        [
+          {
+            "node": "Zyte API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:10:00.000Z",
+  "versionId": "1"
+}
+

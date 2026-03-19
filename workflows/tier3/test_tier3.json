@@ -1,0 +1,440 @@
+{
+  "name": "Test: Tier 3 Workflows",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "test-url",
+              "name": "testUrl",
+              "value": "https://example.com/product/test-123",
+              "type": "string"
+            },
+            {
+              "id": "test-vendor",
+              "name": "testVendorId",
+              "value": "test-vendor-001",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-test-data",
+      "name": "Set Test Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [450, 300],
+      "notes": "Configure test URL and vendor ID here"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'Tier 3: Zyte Fetcher' }}",
+        "fieldsToSend": {
+          "fields": [
+            {
+              "fieldName": "url",
+              "fieldValue": "={{ $json.testUrl }}"
+            },
+            {
+              "fieldName": "maxRetries",
+              "fieldValue": 3
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "test-zyte-fetcher",
+      "name": "Test Zyte Fetcher",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-zyte-success",
+      "name": "Zyte Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'Tier 3: Gemini Extractor' }}",
+        "fieldsToSend": {
+          "fields": [
+            {
+              "fieldName": "html",
+              "fieldValue": "={{ $json.html }}"
+            },
+            {
+              "fieldName": "url",
+              "fieldValue": "={{ $json.url }}"
+            },
+            {
+              "fieldName": "pageType",
+              "fieldValue": "product"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "test-gemini-extractor",
+      "name": "Test Gemini Extractor",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "extraction-success",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-extraction-success",
+      "name": "Extraction Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "test-result",
+              "name": "testResult",
+              "value": "SUCCESS",
+              "type": "string"
+            },
+            {
+              "id": "product-data",
+              "name": "extractedData",
+              "value": "={{ $json.productData }}",
+              "type": "object"
+            },
+            {
+              "id": "total-cost",
+              "name": "totalCost",
+              "value": "={{ ($('Test Zyte Fetcher').item.json.cost || 0) + ($json.cost || 0) }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "format-success",
+      "name": "Format Success Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1450, 150]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'Tier 3: Error Handler' }}",
+        "fieldsToSend": {
+          "fields": [
+            {
+              "fieldName": "error",
+              "fieldValue": "={{ $json.error || $json }}"
+            },
+            {
+              "fieldName": "url",
+              "fieldValue": "={{ $('Set Test Data').item.json.testUrl }}"
+            },
+            {
+              "fieldName": "vendorId",
+              "fieldValue": "={{ $('Set Test Data').item.json.testVendorId }}"
+            },
+            {
+              "fieldName": "attemptCount",
+              "fieldValue": 1
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "test-error-handler",
+      "name": "Test Error Handler",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1450, 250]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "test-result-fail",
+              "name": "testResult",
+              "value": "FAILED",
+              "type": "string"
+            },
+            {
+              "id": "error-details",
+              "name": "errorDetails",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "id": "format-failure",
+      "name": "Format Failure Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1650, 250]
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'Tier 3: Cost Tracker' }}",
+        "fieldsToSend": {
+          "fields": [
+            {
+              "fieldName": "service",
+              "fieldValue": "test"
+            },
+            {
+              "fieldName": "cost",
+              "fieldValue": "={{ $json.totalCost || 0 }}"
+            },
+            {
+              "fieldName": "vendorId",
+              "fieldValue": "={{ $('Set Test Data').item.json.testVendorId }}"
+            },
+            {
+              "fieldName": "url",
+              "fieldValue": "={{ $('Set Test Data').item.json.testUrl }}"
+            },
+            {
+              "fieldName": "operation",
+              "fieldValue": "test_run"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "test-cost-tracker",
+      "name": "Test Cost Tracker",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1650, 150]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "final-result",
+              "name": "finalTestResult",
+              "value": "={{ $json.testResult }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "summary",
+              "name": "summary",
+              "value": "=Test completed. Result: {{ $json.testResult }}. Check logs for details.",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "final-output",
+      "name": "Final Test Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1850, 200]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Test Data": {
+      "main": [
+        [
+          {
+            "node": "Test Zyte Fetcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Zyte Fetcher": {
+      "main": [
+        [
+          {
+            "node": "Zyte Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zyte Success?": {
+      "main": [
+        [
+          {
+            "node": "Test Gemini Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Gemini Extractor": {
+      "main": [
+        [
+          {
+            "node": "Extraction Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraction Success?": {
+      "main": [
+        [
+          {
+            "node": "Format Success Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Result": {
+      "main": [
+        [
+          {
+            "node": "Test Cost Tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Format Failure Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Failure Result": {
+      "main": [
+        [
+          {
+            "node": "Final Test Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Cost Tracker": {
+      "main": [
+        [
+          {
+            "node": "Final Test Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:10:00.000Z",
+  "versionId": "1"
+}
+

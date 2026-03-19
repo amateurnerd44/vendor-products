@@ -1,0 +1,474 @@
+{
+  "name": "Tier 3: Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error-input",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "object"
+            },
+            {
+              "id": "url-input",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "vendor-id",
+              "name": "vendorId",
+              "value": "={{ $json.vendorId }}",
+              "type": "string"
+            },
+            {
+              "id": "attempt-count",
+              "name": "attemptCount",
+              "value": "={{ $json.attemptCount || 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "max-attempts",
+              "name": "maxAttempts",
+              "value": 3,
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "set-variables",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Classify error type\nconst error = $input.item.json.error;\nconst errorMessage = typeof error === 'string' ? error : error.message || JSON.stringify(error);\n\nlet errorType = 'unknown';\nlet shouldRetry = false;\nlet useFallback = false;\n\nif (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {\n  errorType = 'timeout';\n  shouldRetry = true;\n} else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {\n  errorType = 'rate_limit';\n  shouldRetry = true;\n} else if (errorMessage.includes('authentication') || errorMessage.includes('401') || errorMessage.includes('403')) {\n  errorType = 'auth';\n  shouldRetry = false;\n} else if (errorMessage.includes('not found') || errorMessage.includes('404')) {\n  errorType = 'not_found';\n  shouldRetry = false;\n} else if (errorMessage.includes('parse') || errorMessage.includes('JSON')) {\n  errorType = 'parse_error';\n  shouldRetry = false;\n  useFallback = true;\n} else if (errorMessage.includes('extraction') || errorMessage.includes('Missing required fields')) {\n  errorType = 'extraction_error';\n  shouldRetry = false;\n  useFallback = true;\n}\n\nreturn {\n  errorType,\n  errorMessage,\n  shouldRetry,\n  useFallback,\n  url: $input.item.json.url,\n  vendorId: $input.item.json.vendorId,\n  attemptCount: $input.item.json.attemptCount,\n  maxAttempts: $input.item.json.maxAttempts\n};"
+      },
+      "id": "classify-error",
+      "name": "Classify Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "retry-check",
+              "leftValue": "={{ $json.shouldRetry }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "id": "attempts-check",
+              "leftValue": "={{ $json.attemptCount }}",
+              "rightValue": "={{ $json.maxAttempts }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "should-retry",
+      "name": "Should Retry?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.pow(2, $json.attemptCount) * 5 }}",
+        "unit": "seconds"
+      },
+      "id": "exponential-backoff",
+      "name": "Exponential Backoff",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "webhookId": "error-retry-wait",
+      "notes": "Wait 5s, 10s, 20s for attempts 1, 2, 3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "retry-output",
+              "name": "action",
+              "value": "retry",
+              "type": "string"
+            },
+            {
+              "id": "url-retry",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "vendor-retry",
+              "name": "vendorId",
+              "value": "={{ $json.vendorId }}",
+              "type": "string"
+            },
+            {
+              "id": "attempt-increment",
+              "name": "attemptCount",
+              "value": "={{ $json.attemptCount + 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "wait-time",
+              "name": "waitedSeconds",
+              "value": "={{ Math.pow(2, $json.attemptCount) * 5 }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "format-retry",
+      "name": "Format Retry Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "fallback-check",
+              "leftValue": "={{ $json.useFallback }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "should-fallback",
+      "name": "Should Use Fallback?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fallback-action",
+              "name": "action",
+              "value": "fallback",
+              "type": "string"
+            },
+            {
+              "id": "fallback-method",
+              "name": "fallbackMethod",
+              "value": "simple_prompt",
+              "type": "string"
+            },
+            {
+              "id": "url-fallback",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "vendor-fallback",
+              "name": "vendorId",
+              "value": "={{ $json.vendorId }}",
+              "type": "string"
+            },
+            {
+              "id": "original-error",
+              "name": "originalError",
+              "value": "={{ $json.errorMessage }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "format-fallback",
+      "name": "Format Fallback Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1250, 350]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "failure-action",
+              "name": "action",
+              "value": "log_and_alert",
+              "type": "string"
+            },
+            {
+              "id": "error-type",
+              "name": "errorType",
+              "value": "={{ $json.errorType }}",
+              "type": "string"
+            },
+            {
+              "id": "error-msg",
+              "name": "errorMessage",
+              "value": "={{ $json.errorMessage }}",
+              "type": "string"
+            },
+            {
+              "id": "url-failure",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "vendor-failure",
+              "name": "vendorId",
+              "value": "={{ $json.vendorId }}",
+              "type": "string"
+            },
+            {
+              "id": "attempts-made",
+              "name": "attemptsMade",
+              "value": "={{ $json.attemptCount }}",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "id": "format-failure",
+      "name": "Format Failure Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1250, 500]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataMode": "autoMapInputData",
+        "table": "sync_log",
+        "options": {}
+      },
+      "id": "log-to-database",
+      "name": "Log to Sync Log",
+      "type": "n8n-nodes-base.n8nDataTable",
+      "typeVersion": 1,
+      "position": [1450, 400],
+      "notes": "Log all errors to sync_log table"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "critical-check",
+              "leftValue": "={{ $json.errorType }}",
+              "rightValue": "auth",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        }
+      },
+      "id": "is-critical",
+      "name": "Is Critical Error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1650, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@yourdomain.com",
+        "toEmail": "admin@yourdomain.com",
+        "subject": "=🚨 Critical Tier 3 Scraper Error - {{ $json.vendorId }}",
+        "emailType": "html",
+        "message": "=<h2>Critical Error in Tier 3 Scraper</h2>\n<p><strong>Vendor ID:</strong> {{ $json.vendorId }}</p>\n<p><strong>URL:</strong> {{ $json.url }}</p>\n<p><strong>Error Type:</strong> {{ $json.errorType }}</p>\n<p><strong>Error Message:</strong> {{ $json.errorMessage }}</p>\n<p><strong>Attempts Made:</strong> {{ $json.attemptsMade }}</p>\n<p><strong>Timestamp:</strong> {{ $now.toISO() }}</p>\n<hr>\n<p>This error requires immediate attention. Please check the vendor configuration and API credentials.</p>",
+        "options": {}
+      },
+      "id": "send-alert-email",
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1850, 350],
+      "notes": "Send email alert for critical errors"
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Error": {
+      "main": [
+        [
+          {
+            "node": "Should Retry?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Retry?": {
+      "main": [
+        [
+          {
+            "node": "Exponential Backoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Should Use Fallback?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Exponential Backoff": {
+      "main": [
+        [
+          {
+            "node": "Format Retry Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Use Fallback?": {
+      "main": [
+        [
+          {
+            "node": "Format Fallback Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Failure Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Fallback Response": {
+      "main": [
+        [
+          {
+            "node": "Log to Sync Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Failure Response": {
+      "main": [
+        [
+          {
+            "node": "Log to Sync Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Sync Log": {
+      "main": [
+        [
+          {
+            "node": "Is Critical Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Critical Error?": {
+      "main": [
+        [
+          {
+            "node": "Send Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:10:00.000Z",
+  "versionId": "1"
+}
+
