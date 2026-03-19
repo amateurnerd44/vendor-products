@@ -1,0 +1,179 @@
+{
+  "name": "SKU Mapper",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: Array of products from Shopify Scraper\n// Output: SKU → Shopify handle mappings\n\nconst products = $input.all();\nconst mappings = [];\n\nfor (const item of products) {\n  const product = item.json;\n  const handle = product.shopify_handle;\n  const skus = product.skus || [];\n  const vendorId = product.vendor_id;\n  const productUrl = product.product_url;\n  const productName = product.product_name;\n  \n  // Create a mapping for each SKU\n  for (const sku of skus) {\n    if (sku && sku.trim()) {\n      mappings.push({\n        sku: sku.trim(),\n        vendor_id: vendorId,\n        shopify_handle: handle,\n        product_url: productUrl,\n        product_name: productName,\n        mapping_type: 'shopify',\n        created_at: new Date().toISOString()\n      });\n    }\n  }\n  \n  // Also handle products with multiple variants\n  const variants = product.variants || [];\n  for (const variant of variants) {\n    if (variant.sku && variant.sku.trim()) {\n      const variantSku = variant.sku.trim();\n      \n      // Check if we already added this SKU\n      const exists = mappings.find(m => m.sku === variantSku && m.vendor_id === vendorId);\n      \n      if (!exists) {\n        mappings.push({\n          sku: variantSku,\n          vendor_id: vendorId,\n          shopify_handle: handle,\n          product_url: productUrl,\n          product_name: productName,\n          variant_title: variant.title,\n          variant_id: variant.id,\n          mapping_type: 'shopify_variant',\n          created_at: new Date().toISOString()\n        });\n      }\n    }\n  }\n}\n\nreturn mappings.map(m => ({ json: m }));"
+      },
+      "id": "build-sku-mappings",
+      "name": "Build SKU Mappings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.sku }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "filter-valid-skus",
+      "name": "Filter Valid SKUs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "sku",
+              "value": "={{ $json.sku }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-2",
+              "name": "vendor_id",
+              "value": "={{ $json.vendor_id }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-3",
+              "name": "shopify_handle",
+              "value": "={{ $json.shopify_handle }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-4",
+              "name": "product_url",
+              "value": "={{ $json.product_url }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-5",
+              "name": "product_name",
+              "value": "={{ $json.product_name }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-6",
+              "name": "mapping_metadata",
+              "value": "={{ { variant_title: $json.variant_title, variant_id: $json.variant_id, mapping_type: $json.mapping_type } }}",
+              "type": "object"
+            },
+            {
+              "id": "assignment-7",
+              "name": "last_updated",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "format-for-storage",
+      "name": "Format for Storage",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate statistics about the mappings\nconst items = $input.all();\n\nconst stats = {\n  total_mappings: items.length,\n  unique_skus: new Set(items.map(i => i.json.sku)).size,\n  unique_vendors: new Set(items.map(i => i.json.vendor_id)).size,\n  unique_products: new Set(items.map(i => i.json.shopify_handle)).size,\n  mapping_types: {},\n  timestamp: new Date().toISOString()\n};\n\n// Count mapping types\nfor (const item of items) {\n  const type = item.json.mapping_metadata?.mapping_type || 'unknown';\n  stats.mapping_types[type] = (stats.mapping_types[type] || 0) + 1;\n}\n\nreturn [{ json: stats }];"
+      },
+      "id": "generate-statistics",
+      "name": "Generate Statistics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Build SKU Mappings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build SKU Mappings": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid SKUs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid SKUs": {
+      "main": [
+        [
+          {
+            "node": "Format for Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for Storage": {
+      "main": [
+        [
+          {
+            "node": "Generate Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-03-19T16:09:00.000Z",
+      "updatedAt": "2026-03-19T16:09:00.000Z",
+      "id": "tier2",
+      "name": "Tier 2 - Shopify"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:09:00.000Z",
+  "versionId": "1"
+}
+

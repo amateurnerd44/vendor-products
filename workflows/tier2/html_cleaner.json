@@ -1,0 +1,128 @@
+{
+  "name": "HTML Cleaner",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract video URLs from HTML content\nconst bodyHtml = $input.item.json.body_html || '';\nconst videoUrls = [];\n\n// Regular expressions for different video sources\nconst patterns = [\n  // YouTube iframe embeds\n  /<iframe[^>]*src=[\"'](?:https?:)?\\/\\/(?:www\\.)?(?:youtube\\.com\\/embed\\/|youtu\\.be\\/)([^\"'\\s]+)[\"'][^>]*>/gi,\n  // Vimeo iframe embeds\n  /<iframe[^>]*src=[\"'](?:https?:)?\\/\\/(?:www\\.)?(?:player\\.)?vimeo\\.com\\/(?:video\\/)?([^\"'\\s]+)[\"'][^>]*>/gi,\n  // HTML5 video tags\n  /<video[^>]*src=[\"']([^\"']+)[\"'][^>]*>/gi,\n  // Source tags within video elements\n  /<source[^>]*src=[\"']([^\"']+)[\"'][^>]*>/gi,\n  // Direct video URLs in href or data attributes\n  /(?:href|data-video-url|data-src)=[\"']([^\"']*\\.(?:mp4|webm|ogg|mov|avi)(?:\\?[^\"']*)?)[\"']/gi\n];\n\n// Extract URLs using each pattern\nfor (const pattern of patterns) {\n  let match;\n  while ((match = pattern.exec(bodyHtml)) !== null) {\n    const url = match[1];\n    if (url && !videoUrls.includes(url)) {\n      // Normalize YouTube URLs\n      if (url.includes('youtube.com') || url.includes('youtu.be')) {\n        const videoId = url.split('/').pop().split('?')[0];\n        videoUrls.push(`https://www.youtube.com/watch?v=${videoId}`);\n      }\n      // Normalize Vimeo URLs\n      else if (url.includes('vimeo.com')) {\n        const videoId = url.split('/').pop().split('?')[0];\n        videoUrls.push(`https://vimeo.com/${videoId}`);\n      }\n      // Keep other URLs as-is\n      else {\n        videoUrls.push(url);\n      }\n    }\n  }\n}\n\nreturn {\n  json: {\n    body_html: bodyHtml,\n    video_urls: videoUrls,\n    video_count: videoUrls.length\n  }\n};"
+      },
+      "id": "extract-video-urls",
+      "name": "Extract Video URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Strip HTML tags and convert to clean text\nconst bodyHtml = $input.item.json.body_html || '';\nconst videoUrls = $input.item.json.video_urls || [];\n\n// Remove script and style tags completely\nlet cleanText = bodyHtml.replace(/<script[^>]*>.*?<\\/script>/gis, '');\ncleanText = cleanText.replace(/<style[^>]*>.*?<\\/style>/gis, '');\n\n// Convert common HTML entities\nconst entities = {\n  '&nbsp;': ' ',\n  '&amp;': '&',\n  '&lt;': '<',\n  '&gt;': '>',\n  '&quot;': '\"',\n  '&#39;': \"'\",\n  '&mdash;': '—',\n  '&ndash;': '–',\n  '&hellip;': '...',\n  '&bull;': '•'\n};\n\nfor (const [entity, char] of Object.entries(entities)) {\n  cleanText = cleanText.replace(new RegExp(entity, 'g'), char);\n}\n\n// Convert block-level elements to line breaks\ncleanText = cleanText.replace(/<\\/?(div|p|br|h[1-6]|li|tr)[^>]*>/gi, '\\n');\n\n// Remove all remaining HTML tags\ncleanText = cleanText.replace(/<[^>]+>/g, '');\n\n// Clean up whitespace\ncleanText = cleanText\n  .split('\\n')\n  .map(line => line.trim())\n  .filter(line => line.length > 0)\n  .join('\\n');\n\n// Remove excessive line breaks (more than 2 consecutive)\ncleanText = cleanText.replace(/\\n{3,}/g, '\\n\\n');\n\nreturn {\n  json: {\n    marketing_copy: cleanText.trim(),\n    video_urls: videoUrls,\n    original_html_length: bodyHtml.length,\n    clean_text_length: cleanText.length,\n    has_videos: videoUrls.length > 0\n  }\n};"
+      },
+      "id": "strip-html-tags",
+      "name": "Strip HTML Tags",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "marketing_copy",
+              "value": "={{ $json.marketing_copy }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-2",
+              "name": "video_urls",
+              "value": "={{ $json.video_urls }}",
+              "type": "array"
+            },
+            {
+              "id": "assignment-3",
+              "name": "has_videos",
+              "value": "={{ $json.has_videos }}",
+              "type": "boolean"
+            },
+            {
+              "id": "assignment-4",
+              "name": "processing_stats",
+              "value": "={{ { original_length: $json.original_html_length, clean_length: $json.clean_text_length, video_count: $json.video_urls.length } }}",
+              "type": "object"
+            },
+            {
+              "id": "assignment-5",
+              "name": "processed_at",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Extract Video URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Video URLs": {
+      "main": [
+        [
+          {
+            "node": "Strip HTML Tags",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strip HTML Tags": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-03-19T16:09:00.000Z",
+      "updatedAt": "2026-03-19T16:09:00.000Z",
+      "id": "tier2",
+      "name": "Tier 2 - Shopify"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:09:00.000Z",
+  "versionId": "1"
+}
+

@@ -1,0 +1,300 @@
+{
+  "name": "Shopify Scraper",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "store_url",
+              "value": "={{ $json.store_url }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-2",
+              "name": "vendor_id",
+              "value": "={{ $json.vendor_id }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-3",
+              "name": "page",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "assignment-4",
+              "name": "limit",
+              "value": 250,
+              "type": "number"
+            },
+            {
+              "id": "assignment-5",
+              "name": "all_products",
+              "value": [],
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "id": "initialize-variables",
+      "name": "Initialize Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.store_url }}/products.json?limit={{ $json.limit }}&page={{ $json.page }}",
+        "options": {
+          "timeout": 15000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 3
+            }
+          }
+        }
+      },
+      "id": "fetch-products-page",
+      "name": "Fetch Products Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300],
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition-2",
+              "leftValue": "={{ $json.products && Array.isArray($json.products) && $json.products.length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-has-products",
+      "name": "Check Has Products",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rate limiting: Shopify allows 2 req/sec, so we wait 500ms\nawait new Promise(resolve => setTimeout(resolve, 500));\n\n// Get current data\nconst currentProducts = $input.item.json.products || [];\nconst allProducts = $input.item.json.all_products || [];\nconst currentPage = $input.item.json.page || 1;\n\n// Merge products\nconst updatedProducts = [...allProducts, ...currentProducts];\n\n// Prepare for next iteration\nreturn {\n  json: {\n    store_url: $input.item.json.store_url,\n    vendor_id: $input.item.json.vendor_id,\n    page: currentPage + 1,\n    limit: $input.item.json.limit || 250,\n    all_products: updatedProducts,\n    has_more: currentProducts.length === ($input.item.json.limit || 250)\n  }\n};"
+      },
+      "id": "accumulate-and-rate-limit",
+      "name": "Accumulate & Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.has_more }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-has-more",
+      "name": "Check Has More",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1250, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process all collected products\nconst allProducts = $input.item.json.all_products || [];\nconst vendorId = $input.item.json.vendor_id;\nconst storeUrl = $input.item.json.store_url;\n\n// Transform products to our schema\nconst processedProducts = allProducts.map(product => {\n  // Extract all image URLs\n  const imageUrls = (product.images || []).map(img => img.src);\n  \n  // Extract video URLs from body_html (will be processed by HTML cleaner)\n  const bodyHtml = product.body_html || '';\n  \n  // Extract all SKUs from variants\n  const skus = (product.variants || []).map(v => v.sku).filter(Boolean);\n  \n  // Get product handle for URL construction\n  const handle = product.handle;\n  \n  return {\n    vendor_id: vendorId,\n    product_name: product.title,\n    shopify_handle: handle,\n    product_url: `${storeUrl}/products/${handle}`,\n    image_urls: imageUrls,\n    body_html: bodyHtml,\n    skus: skus,\n    variants: product.variants || [],\n    metadata: {\n      shopify_id: product.id,\n      product_type: product.product_type,\n      tags: product.tags ? product.tags.split(',').map(t => t.trim()) : [],\n      vendor: product.vendor,\n      created_at: product.created_at,\n      updated_at: product.updated_at\n    },\n    source_tier: 2,\n    last_updated: new Date().toISOString()\n  };\n});\n\nreturn processedProducts.map(p => ({ json: p }));"
+      },
+      "id": "process-all-products",
+      "name": "Process All Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "success",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "assignment-2",
+              "name": "error",
+              "value": "No products found or error fetching products",
+              "type": "string"
+            },
+            {
+              "id": "assignment-3",
+              "name": "vendor_id",
+              "value": "={{ $('Initialize Variables').item.json.vendor_id }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-4",
+              "name": "store_url",
+              "value": "={{ $('Initialize Variables').item.json.store_url }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "error-output",
+      "name": "Error Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1050, 400]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Initialize Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Variables": {
+      "main": [
+        [
+          {
+            "node": "Fetch Products Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Products Page": {
+      "main": [
+        [
+          {
+            "node": "Check Has Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Has Products": {
+      "main": [
+        [
+          {
+            "node": "Accumulate & Rate Limit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accumulate & Rate Limit": {
+      "main": [
+        [
+          {
+            "node": "Check Has More",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Has More": {
+      "main": [
+        [
+          {
+            "node": "Fetch Products Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process All Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-03-19T16:09:00.000Z",
+      "updatedAt": "2026-03-19T16:09:00.000Z",
+      "id": "tier2",
+      "name": "Tier 2 - Shopify"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:09:00.000Z",
+  "versionId": "1"
+}
+
