@@ -1,0 +1,263 @@
+{
+  "name": "Flow 2: Shopify Order Webhook Trigger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "shopify-orders",
+        "options": {
+          "rawBody": true
+        },
+        "responseMode": "lastNode"
+      },
+      "id": "webhook-trigger",
+      "name": "Shopify Order Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "shopify-orders",
+      "notes": "Receives Shopify order webhooks at /webhook/shopify-orders"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Verify Shopify webhook HMAC signature\nconst crypto = require('crypto');\n\nconst body = $input.first().json.body;\nconst hmacHeader = $input.first().json.headers['x-shopify-hmac-sha256'];\nconst shopifySecret = $env.SHOPIFY_WEBHOOK_SECRET;\n\nif (!shopifySecret) {\n  throw new Error('SHOPIFY_WEBHOOK_SECRET environment variable not set');\n}\n\n// Calculate expected HMAC\nconst hash = crypto\n  .createHmac('sha256', shopifySecret)\n  .update(body, 'utf8')\n  .digest('base64');\n\nconst isValid = hash === hmacHeader;\n\nif (!isValid) {\n  throw new Error('Invalid Shopify webhook signature');\n}\n\n// Parse the JSON body\nconst order = JSON.parse(body);\n\nreturn [{\n  json: {\n    ...order,\n    webhook_verified: true,\n    verified_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "verify-signature",
+      "name": "Verify HMAC Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Verify webhook authenticity using HMAC-SHA256",
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract order data from Shopify webhook payload\nconst shopifyOrder = $input.first().json;\n\n// Extract customer info\nconst customer = shopifyOrder.customer || {};\nconst customerName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim() || 'Unknown';\nconst customerEmail = shopifyOrder.email || customer.email || null;\n\n// Extract line items\nconst items = (shopifyOrder.line_items || []).map(item => ({\n  sku: item.sku || `SHOPIFY-${item.product_id}-${item.variant_id}`,\n  quantity: item.quantity || 1,\n  vendor: item.vendor || 'Unknown',\n  product_id: item.product_id,\n  variant_id: item.variant_id,\n  title: item.title,\n  price: item.price\n}));\n\n// Filter out items without SKUs (digital products, gift cards, etc.)\nconst validItems = items.filter(item => item.sku && !item.sku.startsWith('SHOPIFY-'));\n\nif (validItems.length === 0) {\n  throw new Error('No valid SKUs found in Shopify order');\n}\n\n// Create standardized order object (same format as MarketTime)\nconst order = {\n  order_id: `SHOPIFY-${shopifyOrder.order_number || shopifyOrder.id}`,\n  source: 'shopify',\n  customer_name: customerName,\n  customer_email: customerEmail,\n  order_date: shopifyOrder.created_at || new Date().toISOString(),\n  items: validItems,\n  total_items: validItems.length,\n  total_quantity: validItems.reduce((sum, item) => sum + item.quantity, 0),\n  shopify_order_id: shopifyOrder.id,\n  shopify_order_number: shopifyOrder.order_number,\n  financial_status: shopifyOrder.financial_status,\n  fulfillment_status: shopifyOrder.fulfillment_status,\n  parsed_at: new Date().toISOString()\n};\n\nreturn [{ json: order }];"
+      },
+      "id": "extract-order-data",
+      "name": "Extract Order Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "notes": "Map Shopify order to standard order format"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate extracted order data\nconst order = $input.first().json;\nconst errors = [];\n\n// Required fields validation\nif (!order.order_id) errors.push('Missing order_id');\nif (!order.customer_email) errors.push('Missing customer_email');\nif (!order.items || order.items.length === 0) errors.push('No items in order');\n\n// Email validation\nif (order.customer_email && !order.customer_email.match(/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/)) {\n  errors.push('Invalid customer email format');\n}\n\n// SKU validation\nfor (const item of order.items || []) {\n  if (!item.sku) errors.push(`Item missing SKU: ${JSON.stringify(item)}`);\n  if (!item.quantity || item.quantity < 1) errors.push(`Invalid quantity for SKU ${item.sku}`);\n}\n\n// Shopify-specific validation\nif (order.financial_status !== 'paid' && order.financial_status !== 'authorized') {\n  errors.push(`Order not paid (status: ${order.financial_status})`);\n}\n\nif (errors.length > 0) {\n  return [{\n    json: {\n      ...order,\n      validation_failed: true,\n      validation_errors: errors,\n      error_message: errors.join('; ')\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    ...order,\n    validation_passed: true\n  }\n}];"
+      },
+      "id": "validate-order",
+      "name": "Validate Order Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Validate required fields and payment status"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.validation_passed }}",
+              "operation": "equals",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-validation",
+      "name": "Validation Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "notes": "Route based on validation result"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/flow2-fulfillment",
+        "options": {
+          "timeout": 30000
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "order",
+              "value": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        }
+      },
+      "id": "trigger-fulfillment",
+      "name": "Trigger Fulfillment Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1250, 250],
+      "notes": "Send validated order to fulfillment workflow"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle validation errors\nconst failedOrder = $input.first().json;\n\nreturn [{\n  json: {\n    error_type: 'shopify_order_validation_failed',\n    order_id: failedOrder.order_id || 'UNKNOWN',\n    shopify_order_id: failedOrder.shopify_order_id,\n    customer_email: failedOrder.customer_email || 'UNKNOWN',\n    validation_errors: failedOrder.validation_errors || [],\n    financial_status: failedOrder.financial_status,\n    fulfillment_status: failedOrder.fulfillment_status,\n    timestamp: new Date().toISOString(),\n    action_required: 'Manual review needed'\n  }\n}];"
+      },
+      "id": "prepare-error-alert",
+      "name": "Prepare Error Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400],
+      "notes": "Prepare error notification for admin"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.ADMIN_EMAIL }}",
+        "toEmail": "={{ $env.ADMIN_EMAIL }}",
+        "subject": "Shopify Order Validation Failed - {{ $json.order_id }}",
+        "emailFormat": "html",
+        "text": "=<h2>Shopify Order Validation Error</h2>\n<p><strong>Error Type:</strong> {{ $json.error_type }}</p>\n<p><strong>Order ID:</strong> {{ $json.order_id }}</p>\n<p><strong>Shopify Order ID:</strong> {{ $json.shopify_order_id }}</p>\n<p><strong>Customer Email:</strong> {{ $json.customer_email }}</p>\n<p><strong>Financial Status:</strong> {{ $json.financial_status }}</p>\n<p><strong>Fulfillment Status:</strong> {{ $json.fulfillment_status }}</p>\n<p><strong>Validation Errors:</strong></p>\n<ul>\n{{ $json.validation_errors.map(e => '<li>' + e + '</li>').join('') }}\n</ul>\n<p><strong>Action Required:</strong> {{ $json.action_required }}</p>\n<p><strong>Timestamp:</strong> {{ $json.timestamp }}</p>",
+        "options": {}
+      },
+      "id": "send-admin-alert",
+      "name": "Send Admin Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1450, 400],
+      "notes": "Alert admin about validation failure",
+      "credentials": {
+        "smtp": {
+          "id": "2",
+          "name": "Admin Email SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, order_id: $json.order_id, message: 'Order received and queued for fulfillment' }) }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 250],
+      "notes": "Send 200 OK response to Shopify"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ JSON.stringify({ success: false, error: $json.error_message || 'Validation failed' }) }}"
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 400],
+      "notes": "Send 400 error response to Shopify"
+    }
+  ],
+  "connections": {
+    "Shopify Order Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify HMAC Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify HMAC Signature": {
+      "main": [
+        [
+          {
+            "node": "Extract Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Order Data": {
+      "main": [
+        [
+          {
+            "node": "Validate Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Order Data": {
+      "main": [
+        [
+          {
+            "node": "Validation Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Passed?": {
+      "main": [
+        [
+          {
+            "node": "Trigger Fulfillment Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Fulfillment Workflow": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Admin Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Admin Alert": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-19T17:00:00.000Z",
+  "versionId": "1"
+}
+

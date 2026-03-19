@@ -1,0 +1,121 @@
+{
+  "name": "Flow 2: Customer Delivery Module",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "flow2-customer-delivery", "options": {}, "responseMode": "lastNode"},
+      "id": "webhook-trigger",
+      "name": "Customer Delivery Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "flow2-customer-delivery"
+    },
+    {
+      "parameters": {
+        "functionCode": "const body = $input.first().json.body;\nconst assetPackage = body.asset_package || {};\nconst deliveryMethod = $env.DELIVERY_METHOD || 'email';\n\nreturn [{\n  json: {\n    ...assetPackage,\n    delivery_method: deliveryMethod,\n    delivery_start: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "prepare-delivery",
+      "name": "Prepare Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const pkg = $input.first().json;\nconst customer = pkg.customer || {};\nconst products = pkg.products || [];\n\nlet emailBody = `<h2>Your Product Assets - Order #${pkg.order_id}</h2>`;\nemailBody += `<p>Hi ${customer.name},</p>`;\nemailBody += `<p>Your product assets are ready! Here's what's included:</p>`;\n\nfor (const product of products) {\n  emailBody += `<hr><h3>${product.name} (SKU: ${product.sku})</h3>`;\n  emailBody += `<p><strong>Quantity:</strong> ${product.quantity}</p>`;\n  \n  if (product.images && product.images.length > 0) {\n    emailBody += `<p><strong>Images:</strong></p><ul>`;\n    product.images.forEach(img => {\n      emailBody += `<li><a href=\"${img}\">${img}</a></li>`;\n    });\n    emailBody += `</ul>`;\n  }\n  \n  if (product.videos && product.videos.length > 0) {\n    emailBody += `<p><strong>Videos:</strong></p><ul>`;\n    product.videos.forEach(vid => {\n      emailBody += `<li><a href=\"${vid}\">${vid}</a></li>`;\n    });\n    emailBody += `</ul>`;\n  }\n  \n  if (product.description) {\n    emailBody += `<p><strong>Description:</strong></p><p>${product.description}</p>`;\n  }\n}\n\nemailBody += `<hr><p>Thank you for your order!</p>`;\n\nreturn [{\n  json: {\n    ...pkg,\n    email_body: emailBody,\n    email_subject: `Your Product Assets - Order #${pkg.order_id}`\n  }\n}];"
+      },
+      "id": "format-email",
+      "name": "Format Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.DELIVERY_EMAIL }}",
+        "toEmail": "={{ $json.customer.email }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailFormat": "html",
+        "text": "={{ $json.email_body }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email to Customer",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "credentials": {"smtp": {"id": "3", "name": "Delivery Email SMTP"}},
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {"boolean": [{"value1": "={{ $json.error }}", "operation": "notExists"}]}
+      },
+      "id": "check-delivery-success",
+      "name": "Delivery Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    delivery_success: true,\n    order_id: $json.order_id,\n    customer_email: $json.customer.email,\n    delivered_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "mark-success",
+      "name": "Mark Delivery Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  json: {\n    delivery_success: false,\n    order_id: $json.order_id,\n    customer_email: $json.customer.email,\n    error: $json.error || 'Email delivery failed',\n    failed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "mark-failure",
+      "name": "Mark Delivery Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {},
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-result",
+      "name": "Respond with Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    }
+  ],
+  "connections": {
+    "Customer Delivery Webhook": {"main": [[{"node": "Prepare Delivery", "type": "main", "index": 0}]]},
+    "Prepare Delivery": {"main": [[{"node": "Format Email", "type": "main", "index": 0}]]},
+    "Format Email": {"main": [[{"node": "Send Email to Customer", "type": "main", "index": 0}]]},
+    "Send Email to Customer": {"main": [[{"node": "Delivery Succeeded?", "type": "main", "index": 0}]]},
+    "Delivery Succeeded?": {
+      "main": [
+        [{"node": "Mark Delivery Success", "type": "main", "index": 0}],
+        [{"node": "Mark Delivery Failure", "type": "main", "index": 0}]
+      ]
+    },
+    "Mark Delivery Success": {"main": [[{"node": "Merge Results", "type": "main", "index": 0}]]},
+    "Mark Delivery Failure": {"main": [[{"node": "Merge Results", "type": "main", "index": 1}]]},
+    "Merge Results": {"main": [[{"node": "Respond with Result", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-19T17:00:00.000Z",
+  "versionId": "1"
+}

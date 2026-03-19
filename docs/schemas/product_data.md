@@ -8,7 +8,7 @@ The `product_data` table stores all collected product information from vendors. 
 ## Table Name
 `Products List` (n8n Data Table)
 
-## Schema Definition (31 Fields)
+## Schema Definition (35 Fields)
 
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
@@ -41,6 +41,10 @@ The `product_data` table stores all collected product information from vendors. 
 | `Rules_url` | Text | NULLABLE | URL to rulebook PDF or rules page |
 | `Category_list` | Text | NULLABLE | Comma-separated product categories |
 | `Shopify_Vendor_Id` | Text | NULLABLE | Shopify vendor ID (replaces separate vendor_config table) |
+| `image_urls` | JSON | NULLABLE | Array of product image URLs (Phase 6) |
+| `video_urls` | JSON | NULLABLE | Array of product video URLs (Phase 6) |
+| `vendor_id` | Text | NULLABLE | Foreign key to vendor_config.vendor_id (Phase 6) |
+| `source_tier` | Number | NULLABLE | Tier used to collect data: 1, 2, or 3 (Phase 6) |
 | `createdAt` | DateTime | NOT NULL, AUTO | Timestamp when record was created |
 | `updatedAt` | DateTime | NOT NULL, AUTO | Timestamp when record was last updated |
 
@@ -166,6 +170,52 @@ The `product_data` table stores all collected product information from vendors. 
 - **Nullable**: Yes
 - **Important**: Replaces need for separate vendor_config table
 - **Usage**: Vendor filtering, vendor-specific operations
+
+---
+
+### Media Assets (Phase 6)
+
+#### image_urls
+- **Type**: JSON array
+- **Purpose**: Store product image URLs for order fulfillment
+- **Example**: `["https://cdn.vendor.com/img1.jpg", "https://cdn.vendor.com/img2.jpg"]`
+- **Nullable**: Yes
+- **Format**: JSON array of URL strings
+- **Usage**: Digital asset delivery, customer order fulfillment
+- **Source**: Extracted by Tier 1/2/3 scrapers during data collection
+- **Added**: Phase 6 (Order Fulfillment)
+
+#### video_urls
+- **Type**: JSON array
+- **Purpose**: Store product video URLs for order fulfillment
+- **Example**: `["https://cdn.vendor.com/video1.mp4", "https://youtube.com/watch?v=abc123"]`
+- **Nullable**: Yes
+- **Format**: JSON array of URL strings
+- **Usage**: Digital asset delivery, customer order fulfillment
+- **Source**: Extracted by Tier 1/2/3 scrapers during data collection
+- **Added**: Phase 6 (Order Fulfillment)
+
+#### vendor_id
+- **Type**: Text
+- **Purpose**: Foreign key linking to vendor_config table
+- **Example**: "vendor_001", "acme_products"
+- **Nullable**: Yes
+- **Different from**: `Shopify_Vendor_Id` (which is Shopify-specific)
+- **Usage**: Vendor routing for on-demand scraping, vendor-specific operations
+- **Source**: Set during data collection based on which vendor is being processed
+- **Added**: Phase 6 (Order Fulfillment)
+
+#### source_tier
+- **Type**: Number (1, 2, or 3)
+- **Purpose**: Track which tier was used to collect this product's data
+- **Values**:
+  - `1` = Tier 1 (Drive/Dropbox/Sheets)
+  - `2` = Tier 2 (Shopify API)
+  - `3` = Tier 3 (Zyte + AI scraping)
+- **Nullable**: Yes
+- **Usage**: Data quality tracking, debugging, tier performance analysis
+- **Source**: Set by data_upserter based on vendor.tier_used
+- **Added**: Phase 6 (Order Fulfillment)
 
 ---
 
@@ -537,6 +587,7 @@ Recommended indexes for fast queries:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.0 | 2026-03-19 | Added 4 new fields for Phase 6 (Order Fulfillment): image_urls, video_urls, vendor_id, source_tier |
 | 2.0 | 2026-03-19 | Updated to reflect actual 31-field schema in use |
 | 1.0 | 2026-03-19 | Initial theoretical schema (9 fields) |
 
@@ -547,4 +598,3 @@ Recommended indexes for fast queries:
 - [BoardGameGeek Integration](../guides/bgg_integration.md)
 - [Setup Guide](../../SETUP_GUIDE.md)
 - [Implementation Plan](../../IMPLEMENTATION_PLAN.md)
-

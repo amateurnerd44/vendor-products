@@ -1,0 +1,257 @@
+{
+  "name": "Flow 2: SKU Lookup",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flow2-sku-lookup",
+        "options": {},
+        "responseMode": "lastNode"
+      },
+      "id": "webhook-trigger",
+      "name": "SKU Lookup Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "flow2-sku-lookup",
+      "notes": "Receives SKU array from fulfillment workflow"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract SKUs from request\nconst body = $input.first().json.body;\nconst skus = body.skus || [];\n\nif (!Array.isArray(skus) || skus.length === 0) {\n  throw new Error('No SKUs provided in request');\n}\n\n// Create individual items for each SKU\nreturn skus.map(sku => ({\n  json: {\n    sku: sku,\n    lookup_timestamp: new Date().toISOString()\n  }\n}));"
+      },
+      "id": "extract-skus",
+      "name": "Extract SKUs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Split SKU array into individual items"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "product_data",
+        "returnAll": false,
+        "limit": 1,
+        "options": {
+          "filters": {
+            "conditions": [
+              {
+                "field": "SKU",
+                "operator": "equals",
+                "value": "={{ $json.sku }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "query-product-data",
+      "name": "Query Product Data",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "notes": "Look up SKU in product_data table",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.id }}",
+              "operation": "exists"
+            }
+          ]
+        }
+      },
+      "id": "check-found",
+      "name": "SKU Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "notes": "Check if product was found in database"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Extract relevant product data for fulfillment\nconst product = $input.first().json;\nconst requestedSku = $node['Extract SKUs'].json.sku;\n\n// Parse JSON fields\nlet imageUrls = [];\nlet videoUrls = [];\n\ntry {\n  if (product.image_urls) {\n    imageUrls = typeof product.image_urls === 'string' \n      ? JSON.parse(product.image_urls) \n      : product.image_urls;\n  }\n} catch (e) {\n  console.error('Failed to parse image_urls:', e);\n}\n\ntry {\n  if (product.video_urls) {\n    videoUrls = typeof product.video_urls === 'string' \n      ? JSON.parse(product.video_urls) \n      : product.video_urls;\n  }\n} catch (e) {\n  console.error('Failed to parse video_urls:', e);\n}\n\nreturn [{\n  json: {\n    sku: product.SKU || requestedSku,\n    name: product.Name,\n    description: product.Copy_html,\n    tagline: product.Tagline,\n    image_urls: imageUrls,\n    video_urls: videoUrls,\n    vendor_id: product.vendor_id,\n    source_tier: product.source_tier,\n    found_in_cache: true,\n    cache_hit: true,\n    lookup_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "extract-product-data",
+      "name": "Extract Product Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 250],
+      "notes": "Extract and format product data for fulfillment"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Mark SKU as missing (cache miss)\nconst requestedSku = $node['Extract SKUs'].json.sku;\n\nreturn [{\n  json: {\n    sku: requestedSku,\n    name: null,\n    description: null,\n    tagline: null,\n    image_urls: [],\n    video_urls: [],\n    vendor_id: null,\n    source_tier: null,\n    found_in_cache: false,\n    cache_hit: false,\n    needs_scraping: true,\n    lookup_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "mark-missing",
+      "name": "Mark as Missing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "notes": "Mark SKU as not found (needs on-demand scraping)"
+    },
+    {
+      "parameters": {},
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "notes": "Combine found and missing SKUs"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate lookup results\nconst allResults = $input.all();\n\nconst foundProducts = allResults.filter(r => r.json.cache_hit);\nconst missingSkus = allResults.filter(r => !r.json.cache_hit);\n\nconst cacheHitRate = allResults.length > 0 \n  ? (foundProducts.length / allResults.length) \n  : 0;\n\nreturn [{\n  json: {\n    found_products: foundProducts.map(p => p.json),\n    missing_skus: missingSkus.map(m => m.json.sku),\n    total_skus: allResults.length,\n    cache_hits: foundProducts.length,\n    cache_misses: missingSkus.length,\n    cache_hit_rate: cacheHitRate,\n    cache_hit_percentage: (cacheHitRate * 100).toFixed(2) + '%',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300],
+      "notes": "Calculate cache hit rate and prepare response"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log cache performance metrics\nconst results = $input.first().json;\n\nconsole.log('=== SKU Lookup Performance ===');\nconsole.log(`Total SKUs: ${results.total_skus}`);\nconsole.log(`Cache Hits: ${results.cache_hits}`);\nconsole.log(`Cache Misses: ${results.cache_misses}`);\nconsole.log(`Cache Hit Rate: ${results.cache_hit_percentage}`);\n\nif (results.cache_hit_rate < 0.9) {\n  console.warn('⚠️ Cache hit rate below 90% target!');\n}\n\nif (results.missing_skus.length > 0) {\n  console.log('Missing SKUs:', results.missing_skus.join(', '));\n}\n\nreturn [$input.first()];"
+      },
+      "id": "log-metrics",
+      "name": "Log Performance Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300],
+      "notes": "Log cache performance for monitoring"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "respond-results",
+      "name": "Respond with Results",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1850, 300],
+      "notes": "Return lookup results to caller"
+    }
+  ],
+  "connections": {
+    "SKU Lookup Webhook": {
+      "main": [
+        [
+          {
+            "node": "Extract SKUs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract SKUs": {
+      "main": [
+        [
+          {
+            "node": "Query Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Product Data": {
+      "main": [
+        [
+          {
+            "node": "SKU Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SKU Found?": {
+      "main": [
+        [
+          {
+            "node": "Extract Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Missing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Product Data": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Missing": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Log Performance Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Performance Metrics": {
+      "main": [
+        [
+          {
+            "node": "Respond with Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-19T17:00:00.000Z",
+  "versionId": "1"
+}
+
