@@ -1,0 +1,224 @@
+{
+  "name": "Shopify Detector",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.store_url }}/products.json?limit=1",
+        "options": {
+          "timeout": 10000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": true,
+              "maxRedirects": 3
+            }
+          }
+        }
+      },
+      "id": "test-shopify-endpoint",
+      "name": "Test Shopify Endpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.statusCode }}",
+              "rightValue": 200,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "condition-2",
+              "leftValue": "={{ $json.products }}",
+              "rightValue": "",
+              "operator": {
+                "type": "any",
+                "operation": "exists"
+              }
+            },
+            {
+              "id": "condition-3",
+              "leftValue": "={{ Array.isArray($json.products) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-response",
+      "name": "Check Response",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "is_shopify",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "assignment-2",
+              "name": "store_url",
+              "value": "={{ $('When clicking \\'Test workflow\\'').item.json.store_url }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-3",
+              "name": "products_endpoint",
+              "value": "={{ $('When clicking \\'Test workflow\\'').item.json.store_url }}/products.json",
+              "type": "string"
+            },
+            {
+              "id": "assignment-4",
+              "name": "detection_timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-5",
+              "name": "message",
+              "value": "Valid Shopify store detected",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "shopify-detected",
+      "name": "Shopify Detected",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "is_shopify",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "assignment-2",
+              "name": "store_url",
+              "value": "={{ $('When clicking \\'Test workflow\\'').item.json.store_url }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-3",
+              "name": "detection_timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-4",
+              "name": "message",
+              "value": "Not a Shopify store or /products.json endpoint not accessible",
+              "type": "string"
+            },
+            {
+              "id": "assignment-5",
+              "name": "error_details",
+              "value": "={{ $json.error || 'Invalid response structure' }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "not-shopify",
+      "name": "Not Shopify",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [850, 400]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Test Shopify Endpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Shopify Endpoint": {
+      "main": [
+        [
+          {
+            "node": "Check Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Response": {
+      "main": [
+        [
+          {
+            "node": "Shopify Detected",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-03-19T16:09:00.000Z",
+      "updatedAt": "2026-03-19T16:09:00.000Z",
+      "id": "tier2",
+      "name": "Tier 2 - Shopify"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:09:00.000Z",
+  "versionId": "1"
+}
+

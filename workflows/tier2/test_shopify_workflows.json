@@ -1,0 +1,310 @@
+{
+  "name": "Test Shopify Workflows",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "test_stores",
+              "value": "={{ [\n  { store_url: 'https://shop.polymer80.com', vendor_id: 'test_001', expected: 'small_store' },\n  { store_url: 'https://www.allbirds.com', vendor_id: 'test_002', expected: 'medium_store' },\n  { store_url: 'https://www.google.com', vendor_id: 'test_003', expected: 'not_shopify' }\n] }}",
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "id": "setup-test-data",
+      "name": "Setup Test Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "store_url",
+              "value": "={{ $json.store_url }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-2",
+              "name": "vendor_id",
+              "value": "={{ $json.vendor_id }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-3",
+              "name": "expected",
+              "value": "={{ $json.expected }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "split-test-cases",
+      "name": "Split Test Cases",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/shopify-detector",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "store_url",
+              "value": "={{ $json.store_url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "test-detector",
+      "name": "Test Detector",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300],
+      "notes": "Replace with actual Shopify Detector workflow execution"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.is_shopify }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-is-shopify",
+      "name": "Check Is Shopify",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.N8N_WEBHOOK_BASE_URL }}/webhook/shopify-scraper",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "store_url",
+              "value": "={{ $('Split Test Cases').item.json.store_url }}"
+            },
+            {
+              "name": "vendor_id",
+              "value": "={{ $('Split Test Cases').item.json.vendor_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "test-scraper",
+      "name": "Test Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 200],
+      "notes": "Replace with actual Shopify Scraper workflow execution"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate scraper results\nconst products = $input.all();\nconst testCase = $('Split Test Cases').item.json;\n\nconst validation = {\n  test_case: testCase.expected,\n  vendor_id: testCase.vendor_id,\n  store_url: testCase.store_url,\n  products_found: products.length,\n  has_skus: products.some(p => p.json.skus && p.json.skus.length > 0),\n  has_images: products.some(p => p.json.image_urls && p.json.image_urls.length > 0),\n  has_variants: products.some(p => p.json.variants && p.json.variants.length > 0),\n  test_passed: products.length > 0,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: validation }];"
+      },
+      "id": "validate-scraper-results",
+      "name": "Validate Scraper Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "assignment-1",
+              "name": "test_case",
+              "value": "={{ $('Split Test Cases').item.json.expected }}",
+              "type": "string"
+            },
+            {
+              "id": "assignment-2",
+              "name": "result",
+              "value": "skipped_not_shopify",
+              "type": "string"
+            },
+            {
+              "id": "assignment-3",
+              "name": "store_url",
+              "value": "={{ $('Split Test Cases').item.json.store_url }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "skip-non-shopify",
+      "name": "Skip Non-Shopify",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all test results\nconst results = $input.all();\n\nconst summary = {\n  total_tests: results.length,\n  passed: results.filter(r => r.json.test_passed || r.json.result === 'skipped_not_shopify').length,\n  failed: results.filter(r => !r.json.test_passed && r.json.result !== 'skipped_not_shopify').length,\n  details: results.map(r => r.json),\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: summary }];"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Setup Test Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setup Test Data": {
+      "main": [
+        [
+          {
+            "node": "Split Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Test Cases": {
+      "main": [
+        [
+          {
+            "node": "Test Detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Detector": {
+      "main": [
+        [
+          {
+            "node": "Check Is Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Is Shopify": {
+      "main": [
+        [
+          {
+            "node": "Test Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Non-Shopify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Scraper": {
+      "main": [
+        [
+          {
+            "node": "Validate Scraper Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Scraper Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Non-Shopify": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2026-03-19T16:09:00.000Z",
+      "updatedAt": "2026-03-19T16:09:00.000Z",
+      "id": "tier2",
+      "name": "Tier 2 - Shopify"
+    },
+    {
+      "createdAt": "2026-03-19T16:09:00.000Z",
+      "updatedAt": "2026-03-19T16:09:00.000Z",
+      "id": "testing",
+      "name": "Testing"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:09:00.000Z",
+  "versionId": "1"
+}
+

@@ -122,7 +122,7 @@ The `.env.example` file includes configuration for:
 |-------|--------|---------------|----------------|
 | **Phase 1** | ✅ Complete | Foundation & Infrastructure | 2-4 hours |
 | **Phase 2** | 🔄 Next | Tier 1 Scrapers (Drive, Dropbox, Sheets) | 6-8 hours |
-| **Phase 3** | 📅 Planned | Tier 2 Scrapers (Shopify) | 4-6 hours |
+| **Phase 3** | ✅ Complete | [Tier 2 Scrapers (Shopify)](docs/workflows/TIER2_SHOPIFY.md) | 4-6 hours |
 | **Phase 4** | 📅 Planned | Tier 3 Scrapers (Zyte + AI) | 8-10 hours |
 | **Phase 5** | 📅 Planned | Weekly Sync Workflow | 6-8 hours |
 | **Phase 6** | 📅 Planned | Order Fulfillment Workflow | 8-10 hours |
@@ -243,7 +243,18 @@ vendor-products/
 │   │   ├── vendor_config.md           # Vendor configuration table
 │   │   ├── product_data.md            # Product information table
 │   │   └── sync_log.md                # Sync operation logs
+│   ├── workflows/                      # Workflow documentation
+│   │   └── TIER2_SHOPIFY.md           # Tier 2 Shopify scraper docs
 │   └── guides/                         # Additional guides (future)
+│
+├── workflows/                          # n8n workflow files
+│   └── tier2/                          # Tier 2 Shopify workflows
+│       ├── README.md                   # Tier 2 workflows overview
+│       ├── shopify_detector.json       # Shopify store detector
+│       ├── shopify_scraper.json        # Product scraper with pagination
+│       ├── sku_mapper.json             # SKU → handle mapper
+│       ├── html_cleaner.json           # HTML to text + video extractor
+│       └── test_shopify_workflows.json # Automated testing suite
 │
 ├── templates/                          # Configuration templates
 │   ├── vendor_config_template.json    # JSON template
@@ -330,11 +341,10 @@ Use this checklist when working with the system:
 ---
 
 **Last Updated**: 2026-03-19  
-**Documentation Version**: 1.0  
-**Project Phase**: Phase 1 Complete
+**Documentation Version**: 1.1  
+**Project Phase**: Phase 1 & 3 Complete
 
 ---
 
 **Quick Links**:
 [README](README.md) | [Setup Guide](SETUP_GUIDE.md) | [Implementation Plan](IMPLEMENTATION_PLAN.md) | [Schemas](docs/schemas/)
-
