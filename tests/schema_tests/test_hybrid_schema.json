@@ -1,0 +1,89 @@
+{
+  "name": "Test: Hybrid Schema Validation (35 Fields)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAllRows",
+        "dataTableId": "Products List"
+      },
+      "name": "Get Sample Product",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Test 1: Verify all 35 fields exist\nconst requiredFields = [\n  // Core Identifiers (5)\n  'id', 'UPC', 'EAN', 'SKU', 'Shopify_ID',\n  // Pricing & Ordering (6)\n  'MSRP', 'MAP', 'Cost', 'Case', 'MOQ', 'Increments_Above_MOQ',\n  // Physical Dimensions (4)\n  'Weight_lbs', 'Length_in', 'Width_in', 'Height_in',\n  // Product Information (6)\n  'Name', 'Copy_html', 'Tagline', 'keywords_list', 'Category_list', 'Rules_url',\n  // Board Game Specific (6)\n  'Ages_text', 'Player_Count_text', 'Piece_Count_text', 'Play_Time', 'BGG_weight', 'Mechanics_list',\n  // Integration & Tracking (4)\n  'ClickUp_ID', 'Shopify_Vendor_Id', 'createdAt', 'updatedAt',\n  // NEW - Media Assets & Routing (4 - Phase 6)\n  'image_urls', 'video_urls', 'vendor_id', 'source_tier'\n];\n\nconst product = $input.all()[0].json;\nconst results = {\n  total_fields: 35,\n  fields_found: 0,\n  missing_fields: [],\n  field_tests: {}\n};\n\n// Test each field\nfor (const field of requiredFields) {\n  const exists = field in product;\n  results.field_tests[field] = {\n    exists: exists,\n    value: exists ? product[field] : null,\n    type: exists ? typeof product[field] : null\n  };\n  \n  if (exists) {\n    results.fields_found++;\n  } else {\n    results.missing_fields.push(field);\n  }\n}\n\n// Test 2: Validate new Phase 6 fields\nresults.phase6_validation = {\n  image_urls: {\n    exists: 'image_urls' in product,\n    is_json: product.image_urls ? (typeof product.image_urls === 'object' || typeof product.image_urls === 'string') : false,\n    is_array: Array.isArray(product.image_urls) || (typeof product.image_urls === 'string' && product.image_urls.startsWith('[')),\n    sample: product.image_urls\n  },\n  video_urls: {\n    exists: 'video_urls' in product,\n    is_json: product.video_urls ? (typeof product.video_urls === 'object' || typeof product.video_urls === 'string') : false,\n    is_array: Array.isArray(product.video_urls) || (typeof product.video_urls === 'string' && product.video_urls.startsWith('[')),\n    sample: product.video_urls\n  },\n  vendor_id: {\n    exists: 'vendor_id' in product,\n    is_text: typeof product.vendor_id === 'string' || product.vendor_id === null,\n    sample: product.vendor_id\n  },\n  source_tier: {\n    exists: 'source_tier' in product,\n    is_number: typeof product.source_tier === 'number' || product.source_tier === null,\n    valid_range: product.source_tier === null || (product.source_tier >= 1 && product.source_tier <= 3),\n    sample: product.source_tier\n  }\n};\n\n// Test 3: Validate required fields\nresults.required_fields = {\n  SKU: {\n    exists: !!product.SKU,\n    not_null: product.SKU !== null && product.SKU !== '',\n    value: product.SKU\n  },\n  Name: {\n    exists: !!product.Name,\n    not_null: product.Name !== null && product.Name !== '',\n    value: product.Name\n  }\n};\n\n// Test 4: Overall validation\nresults.validation_summary = {\n  all_fields_present: results.fields_found === 35,\n  phase6_fields_working: results.phase6_validation.image_urls.exists && \n                         results.phase6_validation.video_urls.exists && \n                         results.phase6_validation.vendor_id.exists && \n                         results.phase6_validation.source_tier.exists,\n  required_fields_valid: results.required_fields.SKU.not_null && results.required_fields.Name.not_null,\n  test_passed: results.fields_found === 35 && \n               results.phase6_validation.image_urls.exists && \n               results.phase6_validation.video_urls.exists && \n               results.phase6_validation.vendor_id.exists && \n               results.phase6_validation.source_tier.exists\n};\n\nreturn results;"
+      },
+      "name": "Validate Schema",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.validation_summary.test_passed}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Schema Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "message": "✅ SCHEMA VALIDATION PASSED\n\nAll 35 fields present and working:\n- 31 existing fields from Phase 5\n- 4 new fields from Phase 6 (image_urls, video_urls, vendor_id, source_tier)\n\nPhase 6 fields validated:\n- image_urls: {{$node[\"Validate Schema\"].json.phase6_validation.image_urls.exists}}\n- video_urls: {{$node[\"Validate Schema\"].json.phase6_validation.video_urls.exists}}\n- vendor_id: {{$node[\"Validate Schema\"].json.phase6_validation.vendor_id.exists}}\n- source_tier: {{$node[\"Validate Schema\"].json.phase6_validation.source_tier.exists}}\n\nTest Status: PASSED ✅"
+      },
+      "name": "Success Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "message": "❌ SCHEMA VALIDATION FAILED\n\nFields found: {{$node[\"Validate Schema\"].json.fields_found}}/35\nMissing fields: {{$node[\"Validate Schema\"].json.missing_fields}}\n\nPhase 6 validation:\n{{$node[\"Validate Schema\"].json.phase6_validation}}\n\nTest Status: FAILED ❌"
+      },
+      "name": "Failure Notification",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1050, 400]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Get Sample Product", "type": "main", "index": 0}]]
+    },
+    "Get Sample Product": {
+      "main": [[{"node": "Validate Schema", "type": "main", "index": 0}]]
+    },
+    "Validate Schema": {
+      "main": [[{"node": "Schema Valid?", "type": "main", "index": 0}]]
+    },
+    "Schema Valid?": {
+      "main": [
+        [{"node": "Success Notification", "type": "main", "index": 0}],
+        [{"node": "Failure Notification", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "tags": ["test", "schema", "phase7"],
+  "meta": {
+    "instanceId": "test-hybrid-schema-validation"
+  }
+}
+
