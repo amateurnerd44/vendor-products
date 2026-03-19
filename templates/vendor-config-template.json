@@ -1,0 +1,140 @@
+{
+  "vendors": [
+    {
+      "vendor_id": "vendor_001",
+      "vendor_name": "Acme Products",
+      "data_source_type": "drive",
+      "source_url": "https://drive.google.com/drive/folders/FOLDER_ID_HERE",
+      "credentials": {
+        "type": "oauth",
+        "token": "ENCRYPTED_TOKEN_PLACEHOLDER"
+      },
+      "tier_used": 1,
+      "notes": "Products organized by SKU in subfolders. Each subfolder contains images/ and videos/ directories."
+    },
+    {
+      "vendor_id": "vendor_002",
+      "vendor_name": "Beta Supplies",
+      "data_source_type": "shopify",
+      "source_url": "https://beta-supplies.myshopify.com",
+      "credentials": null,
+      "tier_used": 2,
+      "notes": "Uses public /products.json endpoint. No authentication required."
+    },
+    {
+      "vendor_id": "vendor_003",
+      "vendor_name": "Gamma Industries",
+      "data_source_type": "sheets",
+      "source_url": "https://docs.google.com/spreadsheets/d/SHEET_ID_HERE",
+      "credentials": {
+        "type": "service_account",
+        "key_file": "ENCRYPTED_KEY_PLACEHOLDER"
+      },
+      "tier_used": 1,
+      "notes": "Product catalog in Sheet1. Columns: SKU | Product Name | Image URLs (comma-separated) | Video URLs (comma-separated) | Marketing Copy"
+    },
+    {
+      "vendor_id": "vendor_004",
+      "vendor_name": "Delta Manufacturing",
+      "data_source_type": "dropbox",
+      "source_url": "https://www.dropbox.com/sh/SHARED_FOLDER_ID",
+      "credentials": {
+        "type": "oauth",
+        "access_token": "ENCRYPTED_TOKEN_PLACEHOLDER"
+      },
+      "tier_used": 1,
+      "notes": "Folder structure: /products/{SKU}/images/ and /products/{SKU}/videos/. Product name in folder metadata."
+    },
+    {
+      "vendor_id": "vendor_005",
+      "vendor_name": "Epsilon Wholesale",
+      "data_source_type": "website",
+      "source_url": "https://epsilon-wholesale.com/products",
+      "credentials": null,
+      "tier_used": 3,
+      "notes": "Requires Zyte API + Gemini AI extraction. No public API available. Product pages follow pattern: /products/{product-slug}"
+    },
+    {
+      "vendor_id": "vendor_006",
+      "vendor_name": "Zeta Distributors",
+      "data_source_type": "shopify",
+      "source_url": "https://zeta-dist.myshopify.com",
+      "credentials": null,
+      "tier_used": 2,
+      "notes": "Shopify store with public JSON endpoints. Products paginated at /products.json?page={n}"
+    },
+    {
+      "vendor_id": "vendor_007",
+      "vendor_name": "Eta Imports",
+      "data_source_type": "drive",
+      "source_url": "https://drive.google.com/drive/folders/FOLDER_ID_HERE",
+      "credentials": {
+        "type": "oauth",
+        "token": "ENCRYPTED_TOKEN_PLACEHOLDER"
+      },
+      "tier_used": 1,
+      "notes": "Flat folder structure. Files named as: {SKU}_image1.jpg, {SKU}_video1.mp4, {SKU}_description.txt"
+    },
+    {
+      "vendor_id": "vendor_008",
+      "vendor_name": "Theta Goods",
+      "data_source_type": "website",
+      "source_url": "https://thetagoods.com/catalog",
+      "credentials": {
+        "type": "basic_auth",
+        "username": "ENCRYPTED_USERNAME",
+        "password": "ENCRYPTED_PASSWORD"
+      },
+      "tier_used": 3,
+      "notes": "Password-protected catalog. Requires Zyte + AI. Product grid layout with lazy-loaded images."
+    },
+    {
+      "vendor_id": "vendor_009",
+      "vendor_name": "Iota Merchandise",
+      "data_source_type": "sheets",
+      "source_url": "https://docs.google.com/spreadsheets/d/SHEET_ID_HERE",
+      "credentials": {
+        "type": "service_account",
+        "key_file": "ENCRYPTED_KEY_PLACEHOLDER"
+      },
+      "tier_used": 1,
+      "notes": "Multiple sheets: 'Products' (main data), 'Images' (SKU to image URL mapping), 'Videos' (SKU to video URL mapping)"
+    },
+    {
+      "vendor_id": "vendor_010",
+      "vendor_name": "Kappa Supplies Co",
+      "data_source_type": "dropbox",
+      "source_url": "https://www.dropbox.com/sh/SHARED_FOLDER_ID",
+      "credentials": {
+        "type": "oauth",
+        "access_token": "ENCRYPTED_TOKEN_PLACEHOLDER"
+      },
+      "tier_used": 1,
+      "notes": "Organized by category, then SKU. Path: /category/{category_name}/{SKU}/"
+    }
+  ],
+  "template_notes": {
+    "data_source_types": [
+      "drive - Google Drive folders",
+      "dropbox - Dropbox shared folders",
+      "sheets - Google Sheets spreadsheets",
+      "shopify - Shopify stores with public JSON endpoints",
+      "website - Custom websites requiring web scraping"
+    ],
+    "tier_classification": {
+      "1": "Direct integrations (Drive, Dropbox, Sheets) - FREE",
+      "2": "Shopify public JSON endpoints - FREE",
+      "3": "Zyte API + Gemini AI extraction - USAGE-BASED COST"
+    },
+    "credentials_encryption": "All credential fields must be encrypted before storing in n8n Data Tables. Use n8n's built-in encryption features.",
+    "usage_instructions": [
+      "1. Copy this template for each new vendor",
+      "2. Fill in all required fields (vendor_id, vendor_name, data_source_type, source_url, tier_used)",
+      "3. Add credentials if required for the data source",
+      "4. Encrypt sensitive credential data before storing",
+      "5. Import to n8n Data Tables via CSV or API",
+      "6. Test data source connectivity before enabling in workflows"
+    ]
+  }
+}
+
