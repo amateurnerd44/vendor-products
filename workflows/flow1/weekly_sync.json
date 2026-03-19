@@ -1,0 +1,703 @@
+{
+  "name": "Flow 1: Weekly Product Catalog Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Weekly Cron Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "notes": "Runs every Sunday at 2:00 AM"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": "={{ $env.MARKETTIME_ITEMS_FOLDER_ID }}",
+        "options": {
+          "googleFileConversion": {
+            "conversion": {
+              "doConversion": true,
+              "conversionFormat": "text/csv"
+            }
+          }
+        }
+      },
+      "id": "fetch-markettime-list",
+      "name": "Fetch MarketTime Items List",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [450, 200],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "1",
+          "name": "Google Drive Account"
+        }
+      },
+      "notes": "Fetch the MarketTime items list from Google Drive to identify new items"
+    },
+    {
+      "parameters": {
+        "operation": "getAllRows",
+        "tableId": "vendor_config"
+      },
+      "id": "fetch-vendors",
+      "name": "Fetch All Vendors",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [450, 400],
+      "notes": "Get all vendors from vendor_config table"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse MarketTime CSV and create SKU lookup\nconst markettimeData = $input.first().json.data;\nconst lines = markettimeData.split('\\n');\nconst headers = lines[0].split(',');\n\n// Create a Set of MarketTime SKUs for fast lookup\nconst markettimeSKUs = new Set();\nfor (let i = 1; i < lines.length; i++) {\n  const values = lines[i].split(',');\n  if (values.length > 0 && values[0]) {\n    markettimeSKUs.add(values[0].trim());\n  }\n}\n\n// Store in workflow static data for later use\nreturn [{\n  json: {\n    markettime_skus: Array.from(markettimeSKUs),\n    total_markettime_items: markettimeSKUs.size,\n    last_updated: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "parse-markettime-list",
+      "name": "Parse MarketTime List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 200],
+      "notes": "Parse CSV and create SKU lookup set"
+    },
+    {
+      "parameters": {},
+      "id": "merge-markettime-vendors",
+      "name": "Merge MarketTime & Vendors",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Combine MarketTime list with vendor data"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Initialize sync tracking\nconst syncStartTime = new Date().toISOString();\nconst vendors = $input.all();\n\n// Add sync metadata to each vendor\nreturn vendors.map(vendor => ({\n  json: {\n    ...vendor.json,\n    sync_start_time: syncStartTime,\n    sync_id: `sync_${Date.now()}_${vendor.json.vendor_id}`\n  }\n}));"
+      },
+      "id": "prepare-sync",
+      "name": "Prepare Sync",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "notes": "Add sync metadata to each vendor"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop-vendors",
+      "name": "Loop Through Vendors",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [850, 300],
+      "notes": "Process vendors one at a time"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.tier_used }}",
+              "operation": "equals",
+              "value2": "1"
+            }
+          ]
+        }
+      },
+      "id": "check-tier-1",
+      "name": "Is Tier 1?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "notes": "Check if vendor uses Tier 1 (Drive/Dropbox/Sheets)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.tier_used }}",
+              "operation": "equals",
+              "value2": "2"
+            }
+          ]
+        }
+      },
+      "id": "check-tier-2",
+      "name": "Is Tier 2?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "notes": "Check if vendor uses Tier 2 (Shopify)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.tier_used }}",
+              "operation": "equals",
+              "value2": "3"
+            }
+          ]
+        }
+      },
+      "id": "check-tier-3",
+      "name": "Is Tier 3?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 600],
+      "notes": "Check if vendor uses Tier 3 (Zyte + AI)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.data_source_type }}",
+              "operation": "equals",
+              "value2": "drive"
+            }
+          ]
+        }
+      },
+      "id": "route-tier1-type",
+      "name": "Route Tier 1 Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "notes": "Route to appropriate Tier 1 scraper",
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.data_source_type }}",
+                    "operation": "equals",
+                    "value2": "drive"
+                  }
+                ]
+              },
+              "output": 0
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.data_source_type }}",
+                    "operation": "equals",
+                    "value2": "dropbox"
+                  }
+                ]
+              },
+              "output": 1
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.data_source_type }}",
+                    "operation": "equals",
+                    "value2": "sheets"
+                  }
+                ]
+              },
+              "output": 2
+            }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'google_drive_scraper' }}"
+      },
+      "id": "call-drive-scraper",
+      "name": "Call Drive Scraper",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1450, 100],
+      "notes": "Execute Google Drive scraper workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'dropbox_scraper' }}"
+      },
+      "id": "call-dropbox-scraper",
+      "name": "Call Dropbox Scraper",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1450, 200],
+      "notes": "Execute Dropbox scraper workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'google_sheets_scraper' }}"
+      },
+      "id": "call-sheets-scraper",
+      "name": "Call Sheets Scraper",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "notes": "Execute Google Sheets scraper workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'shopify_scraper' }}"
+      },
+      "id": "call-shopify-scraper",
+      "name": "Call Shopify Scraper",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1250, 400],
+      "notes": "Execute Shopify scraper workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'zyte_scraper' }}"
+      },
+      "id": "call-zyte-scraper",
+      "name": "Call Zyte Scraper",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1250, 600],
+      "notes": "Execute Zyte + AI scraper workflow"
+    },
+    {
+      "parameters": {},
+      "id": "merge-scraper-results",
+      "name": "Merge Scraper Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1650, 400],
+      "notes": "Combine results from all scrapers"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'data_upserter' }}"
+      },
+      "id": "call-data-upserter",
+      "name": "Call Data Upserter",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1850, 400],
+      "notes": "Upsert products to database"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'sync_logger' }}"
+      },
+      "id": "call-sync-logger",
+      "name": "Call Sync Logger",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [2050, 400],
+      "notes": "Log sync results"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.sync_status }}",
+              "operation": "equals",
+              "value2": "failed"
+            }
+          ]
+        }
+      },
+      "id": "check-sync-failed",
+      "name": "Sync Failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2250, 400],
+      "notes": "Check if sync failed for this vendor"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'error_notifier' }}"
+      },
+      "id": "call-error-notifier",
+      "name": "Call Error Notifier",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [2450, 300],
+      "notes": "Send error notification"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "vendor_config",
+        "dataMode": "autoMapInputData",
+        "options": {
+          "queryParameterName": "vendor_id",
+          "queryParameterValue": "={{ $json.vendor_id }}"
+        }
+      },
+      "id": "update-vendor-sync-date",
+      "name": "Update Vendor Sync Date",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [2450, 500],
+      "notes": "Update last_sync_date in vendor_config"
+    },
+    {
+      "parameters": {},
+      "id": "merge-back-to-loop",
+      "name": "Merge Back to Loop",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [2650, 400],
+      "notes": "Merge results back to loop"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate all sync results\nconst allResults = $input.all();\nconst syncEndTime = new Date().toISOString();\n\nconst summary = {\n  sync_end_time: syncEndTime,\n  total_vendors: allResults.length,\n  successful_syncs: allResults.filter(r => r.json.sync_status === 'success').length,\n  failed_syncs: allResults.filter(r => r.json.sync_status === 'failed').length,\n  total_products_added: allResults.reduce((sum, r) => sum + (r.json.products_added || 0), 0),\n  total_products_updated: allResults.reduce((sum, r) => sum + (r.json.products_updated || 0), 0),\n  vendors_by_tier: {\n    tier1: allResults.filter(r => r.json.tier_used === 1).length,\n    tier2: allResults.filter(r => r.json.tier_used === 2).length,\n    tier3: allResults.filter(r => r.json.tier_used === 3).length\n  },\n  failed_vendors: allResults\n    .filter(r => r.json.sync_status === 'failed')\n    .map(r => ({\n      vendor_id: r.json.vendor_id,\n      vendor_name: r.json.vendor_name,\n      error: r.json.error\n    }))\n};\n\nreturn [{ json: summary }];"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2850, 400],
+      "notes": "Create summary of all sync results"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'sync_summary_notifier' }}"
+      },
+      "id": "send-summary-notification",
+      "name": "Send Summary Notification",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [3050, 400],
+      "notes": "Send summary email/Slack notification"
+    }
+  ],
+  "connections": {
+    "Weekly Cron Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch MarketTime Items List",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch All Vendors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch MarketTime Items List": {
+      "main": [
+        [
+          {
+            "node": "Parse MarketTime List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse MarketTime List": {
+      "main": [
+        [
+          {
+            "node": "Merge MarketTime & Vendors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Vendors": {
+      "main": [
+        [
+          {
+            "node": "Merge MarketTime & Vendors",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge MarketTime & Vendors": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sync": {
+      "main": [
+        [
+          {
+            "node": "Loop Through Vendors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Through Vendors": {
+      "main": [
+        [
+          {
+            "node": "Is Tier 1?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Tier 2?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Tier 3?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Tier 1?": {
+      "main": [
+        [
+          {
+            "node": "Route Tier 1 Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Tier 2?": {
+      "main": [
+        [
+          {
+            "node": "Call Shopify Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Tier 3?": {
+      "main": [
+        [
+          {
+            "node": "Call Zyte Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Tier 1 Type": {
+      "main": [
+        [
+          {
+            "node": "Call Drive Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Dropbox Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Sheets Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Drive Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge Scraper Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Dropbox Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge Scraper Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Sheets Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge Scraper Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Shopify Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge Scraper Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Zyte Scraper": {
+      "main": [
+        [
+          {
+            "node": "Merge Scraper Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Scraper Results": {
+      "main": [
+        [
+          {
+            "node": "Call Data Upserter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Data Upserter": {
+      "main": [
+        [
+          {
+            "node": "Call Sync Logger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Sync Logger": {
+      "main": [
+        [
+          {
+            "node": "Sync Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Failed?": {
+      "main": [
+        [
+          {
+            "node": "Call Error Notifier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Vendor Sync Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Error Notifier": {
+      "main": [
+        [
+          {
+            "node": "Merge Back to Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Vendor Sync Date": {
+      "main": [
+        [
+          {
+            "node": "Merge Back to Loop",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Back to Loop": {
+      "main": [
+        [
+          {
+            "node": "Loop Through Vendors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-03-19T16:26:00.000Z",
+  "versionId": "1"
+}

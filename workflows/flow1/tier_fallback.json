@@ -1,0 +1,345 @@
+{
+  "name": "Flow 1: Tier Fallback Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check if fallback is configured and appropriate\nconst input = $input.first().json;\n\n// Only Tier 2 can fallback to Tier 3\nconst canFallback = input.tier_used === 2 && input.fallback_to_tier3 === true;\n\nreturn [{\n  json: {\n    ...input,\n    can_fallback: canFallback,\n    original_tier: input.tier_used,\n    fallback_tier: canFallback ? 3 : null,\n    fallback_reason: input.sync_status === 'failed' ? 'primary_tier_failed' : null\n  }\n}];"
+      },
+      "id": "check-fallback-eligibility",
+      "name": "Check Fallback Eligibility",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Determine if vendor can fallback to Tier 3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.can_fallback }}",
+              "operation": "equals",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "can-fallback",
+      "name": "Can Fallback?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "notes": "Check if fallback is possible"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log fallback attempt\nconst input = $input.first().json;\n\nconst logMessage = `Attempting Tier 3 fallback for vendor ${input.vendor_name} (${input.vendor_id}) after Tier 2 failure`;\n\nconsole.log(logMessage);\n\nreturn [{\n  json: {\n    ...input,\n    fallback_attempt_time: new Date().toISOString(),\n    fallback_log: logMessage\n  }\n}];"
+      },
+      "id": "log-fallback-attempt",
+      "name": "Log Fallback Attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 200],
+      "notes": "Log that we're attempting fallback"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'zyte_scraper' }}"
+      },
+      "id": "call-tier3-scraper",
+      "name": "Call Tier 3 Scraper",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "notes": "Execute Zyte + AI scraper as fallback",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.sync_status }}",
+              "operation": "equals",
+              "value2": "success"
+            }
+          ]
+        }
+      },
+      "id": "fallback-succeeded",
+      "name": "Fallback Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "notes": "Check if Tier 3 fallback was successful"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "vendor_config",
+        "dataMode": "defineBelow",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "tier_used",
+              "fieldValue": "3"
+            },
+            {
+              "fieldName": "data_source_type",
+              "fieldValue": "website"
+            },
+            {
+              "fieldName": "fallback_success_date",
+              "fieldValue": "={{ new Date().toISOString() }}"
+            },
+            {
+              "fieldName": "notes",
+              "fieldValue": "={{ $json.notes + '\\n[' + new Date().toISOString() + '] Automatically switched to Tier 3 after Tier 2 failure' }}"
+            }
+          ]
+        },
+        "options": {
+          "queryParameterName": "vendor_id",
+          "queryParameterValue": "={{ $json.vendor_id }}"
+        }
+      },
+      "id": "update-vendor-to-tier3",
+      "name": "Update Vendor to Tier 3",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [1450, 150],
+      "notes": "Permanently switch vendor to Tier 3"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Create success notification\nconst input = $input.first().json;\n\nconst message = `\n✅ **Tier Fallback Successful**\n\n**Vendor:** ${input.vendor_name} (${input.vendor_id})\n**Original Tier:** Tier 2 (Shopify)\n**Fallback Tier:** Tier 3 (Zyte + AI)\n**Time:** ${new Date().toLocaleString()}\n\n**Result:**\n- Products Added: ${input.products_added || 0}\n- Products Updated: ${input.products_updated || 0}\n- Vendor config has been updated to use Tier 3 permanently\n\n**Note:** This vendor will now use Tier 3 for future syncs. Review if this is acceptable or if Tier 2 issues can be resolved.\n`;\n\nreturn [{\n  json: {\n    ...input,\n    notification_message: message,\n    notification_type: 'fallback_success',\n    severity: 'medium'\n  }\n}];"
+      },
+      "id": "format-success-notification",
+      "name": "Format Success Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 150],
+      "notes": "Create notification for successful fallback"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Create failure notification\nconst input = $input.first().json;\n\nconst message = `\n❌ **Tier Fallback Failed**\n\n**Vendor:** ${input.vendor_name} (${input.vendor_id})\n**Original Tier:** Tier 2 (Shopify)\n**Attempted Fallback:** Tier 3 (Zyte + AI)\n**Time:** ${new Date().toLocaleString()}\n\n**Status:** Both Tier 2 and Tier 3 failed for this vendor\n\n**Required Actions:**\n- Manual investigation required\n- Check vendor website accessibility\n- Verify data source configuration\n- Consider contacting vendor for data access\n- Review error logs in sync_log table\n`;\n\nreturn [{\n  json: {\n    ...input,\n    notification_message: message,\n    notification_type: 'fallback_failed',\n    severity: 'critical'\n  }\n}];"
+      },
+      "id": "format-failure-notification",
+      "name": "Format Failure Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 250],
+      "notes": "Create notification for failed fallback"
+    },
+    {
+      "parameters": {
+        "functionCode": "// No fallback available\nconst input = $input.first().json;\n\nreturn [{\n  json: {\n    ...input,\n    fallback_attempted: false,\n    fallback_result: 'not_eligible',\n    message: 'Vendor not eligible for fallback (Tier 1 or Tier 3, or fallback not configured)'\n  }\n}];"
+      },
+      "id": "no-fallback-available",
+      "name": "No Fallback Available",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400],
+      "notes": "Handle case where fallback is not possible"
+    },
+    {
+      "parameters": {},
+      "id": "merge-results",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [1850, 300],
+      "notes": "Combine all fallback results"
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.notification_message }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{ $env.SLACK_ALERT_CHANNEL || '#alerts' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2050, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Slack Webhook Auth"
+        }
+      },
+      "notes": "Send fallback notification",
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Check Fallback Eligibility",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Fallback Eligibility": {
+      "main": [
+        [
+          {
+            "node": "Can Fallback?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Fallback?": {
+      "main": [
+        [
+          {
+            "node": "Log Fallback Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Fallback Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Fallback Attempt": {
+      "main": [
+        [
+          {
+            "node": "Call Tier 3 Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Tier 3 Scraper": {
+      "main": [
+        [
+          {
+            "node": "Fallback Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fallback Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Update Vendor to Tier 3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Failure Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Vendor to Tier 3": {
+      "main": [
+        [
+          {
+            "node": "Format Success Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Failure Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "No Fallback Available": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:26:00.000Z",
+  "versionId": "1"
+}
+

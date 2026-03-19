@@ -1,0 +1,173 @@
+{
+  "name": "Flow 1: Error Notifier",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format error notification message\nconst input = $input.first().json;\n\nconst errorMessage = `\n🚨 **Vendor Sync Failed**\n\n**Vendor:** ${input.vendor_name} (${input.vendor_id})\n**Tier:** ${input.tier_used}\n**Data Source:** ${input.data_source_type}\n**Time:** ${new Date().toLocaleString()}\n\n**Error Details:**\n${input.errors && input.errors.length > 0 ? input.errors.map(e => `- ${e}`).join('\\n') : 'Unknown error'}\n\n**Suggested Actions:**\n${getSuggestedActions(input)}\n\n**Statistics:**\n- Products Added: ${input.products_added || 0}\n- Products Updated: ${input.products_updated || 0}\n- Duration: ${input.duration_seconds || 0} seconds\n`;\n\nfunction getSuggestedActions(data) {\n  const actions = [];\n  \n  if (data.tier_used === 1) {\n    actions.push('- Check Google Drive/Dropbox/Sheets access permissions');\n    actions.push('- Verify folder/file IDs in vendor config');\n    actions.push('- Ensure data source structure matches expected format');\n  } else if (data.tier_used === 2) {\n    actions.push('- Verify Shopify store URL is accessible');\n    actions.push('- Check if /products.json endpoint is available');\n    actions.push('- Review rate limiting settings');\n  } else if (data.tier_used === 3) {\n    actions.push('- Check Zyte API credits and status');\n    actions.push('- Verify Gemini API key and quota');\n    actions.push('- Review website structure for changes');\n    actions.push('- Consider updating AI extraction prompts');\n  }\n  \n  actions.push('- Review sync_log table for detailed error information');\n  actions.push('- Consider manual intervention or tier fallback');\n  \n  return actions.join('\\n');\n}\n\nreturn [{\n  json: {\n    ...input,\n    error_message: errorMessage,\n    notification_type: 'vendor_sync_failed',\n    severity: 'high',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "format-error-message",
+      "name": "Format Error Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Create detailed error notification with suggested actions"
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "url": "={{ $env.SLACK_WEBHOOK_URL }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $json.error_message }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{ $env.SLACK_ALERT_CHANNEL || '#alerts' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-slack-notification",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Slack Webhook Auth"
+        }
+      },
+      "notes": "Send alert to Slack channel",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.NOTIFICATION_FROM_EMAIL }}",
+        "toEmail": "={{ $env.NOTIFICATION_TO_EMAIL }}",
+        "subject": "🚨 Vendor Sync Failed: {{ $json.vendor_name }}",
+        "emailType": "text",
+        "message": "={{ $json.error_message }}",
+        "options": {}
+      },
+      "id": "send-email-notification",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP Account"
+        }
+      },
+      "notes": "Send alert via email",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "merge-notifications",
+      "name": "Merge Notifications",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Combine notification results"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log notification status\nconst input = $input.first().json;\n\nreturn [{\n  json: {\n    vendor_id: input.vendor_id,\n    vendor_name: input.vendor_name,\n    notification_sent: true,\n    notification_timestamp: new Date().toISOString(),\n    slack_sent: $node['Send Slack Notification'].json ? true : false,\n    email_sent: $node['Send Email Notification'].json ? true : false\n  }\n}];"
+      },
+      "id": "log-notification-status",
+      "name": "Log Notification Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "notes": "Track notification delivery status"
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Format Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error Message": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge Notifications",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Notifications": {
+      "main": [
+        [
+          {
+            "node": "Log Notification Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:26:00.000Z",
+  "versionId": "1"
+}
+

@@ -1,0 +1,92 @@
+{
+  "name": "Flow 1: Sync Logger",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Prepare sync log entry\nconst input = $input.first().json;\nconst syncEndTime = new Date();\nconst syncStartTime = new Date(input.sync_start_time);\nconst durationSeconds = Math.floor((syncEndTime - syncStartTime) / 1000);\n\n// Determine sync status\nlet status = 'success';\nif (input.errors && input.errors.length > 0) {\n  status = input.products_added > 0 || input.products_updated > 0 ? 'partial' : 'failed';\n}\n\n// Calculate cost estimate for Tier 3\nlet costEstimate = 0;\nif (input.tier_used === 3) {\n  const zyteRequests = input.products_added + input.products_updated;\n  const zyteCost = zyteRequests * 0.00013;\n  const geminiCost = zyteRequests * 0.002;\n  costEstimate = zyteCost + geminiCost;\n}\n\nconst logEntry = {\n  sync_date: syncEndTime.toISOString(),\n  vendor_id: input.vendor_id,\n  vendor_name: input.vendor_name,\n  status: status,\n  products_updated: input.products_updated || 0,\n  products_added: input.products_added || 0,\n  products_skipped: input.products_skipped || 0,\n  errors: input.errors || [],\n  duration_seconds: durationSeconds,\n  tier_used: input.tier_used,\n  cost_estimate: costEstimate,\n  new_markettime_items: input.new_markettime_items || 0\n};\n\nreturn [{ json: logEntry }];"
+      },
+      "id": "prepare-log-entry",
+      "name": "Prepare Log Entry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Calculate sync statistics and prepare log entry"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "sync_log",
+        "dataMode": "autoMapInputData"
+      },
+      "id": "insert-log",
+      "name": "Insert Sync Log",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "notes": "Insert log entry into sync_log table"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Return the log entry with sync status for downstream processing\nconst logEntry = $input.first().json;\n\nreturn [{\n  json: {\n    ...logEntry,\n    sync_status: logEntry.status,\n    log_id: logEntry.id || logEntry.log_id\n  }\n}];"
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Format output for next workflow step"
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Entry": {
+      "main": [
+        [
+          {
+            "node": "Insert Sync Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Sync Log": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:26:00.000Z",
+  "versionId": "1"
+}
+

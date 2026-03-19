@@ -1,0 +1,161 @@
+{
+  "name": "Test: Weekly Sync Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "notes": "Manually trigger test sync"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Create test vendor data (10 vendors)\nconst testVendors = [\n  {\n    vendor_id: 'test_vendor_001',\n    vendor_name: 'Test Drive Vendor',\n    data_source_type: 'drive',\n    tier_used: 1,\n    source_url: 'test_folder_id_1',\n    fallback_to_tier3: false\n  },\n  {\n    vendor_id: 'test_vendor_002',\n    vendor_name: 'Test Dropbox Vendor',\n    data_source_type: 'dropbox',\n    tier_used: 1,\n    source_url: 'test_folder_id_2',\n    fallback_to_tier3: false\n  },\n  {\n    vendor_id: 'test_vendor_003',\n    vendor_name: 'Test Sheets Vendor',\n    data_source_type: 'sheets',\n    tier_used: 1,\n    source_url: 'test_sheet_id_1',\n    fallback_to_tier3: false\n  },\n  {\n    vendor_id: 'test_vendor_004',\n    vendor_name: 'Test Shopify Vendor 1',\n    data_source_type: 'shopify',\n    tier_used: 2,\n    source_url: 'https://test-store-1.myshopify.com',\n    fallback_to_tier3: true\n  },\n  {\n    vendor_id: 'test_vendor_005',\n    vendor_name: 'Test Shopify Vendor 2',\n    data_source_type: 'shopify',\n    tier_used: 2,\n    source_url: 'https://test-store-2.myshopify.com',\n    fallback_to_tier3: true\n  },\n  {\n    vendor_id: 'test_vendor_006',\n    vendor_name: 'Test Website Vendor 1',\n    data_source_type: 'website',\n    tier_used: 3,\n    source_url: 'https://test-vendor-1.com',\n    fallback_to_tier3: false\n  },\n  {\n    vendor_id: 'test_vendor_007',\n    vendor_name: 'Test Website Vendor 2',\n    data_source_type: 'website',\n    tier_used: 3,\n    source_url: 'https://test-vendor-2.com',\n    fallback_to_tier3: false\n  },\n  {\n    vendor_id: 'test_vendor_008_broken',\n    vendor_name: 'Test Broken Drive Vendor',\n    data_source_type: 'drive',\n    tier_used: 1,\n    source_url: 'invalid_folder_id',\n    fallback_to_tier3: false,\n    _test_should_fail: true\n  },\n  {\n    vendor_id: 'test_vendor_009_broken',\n    vendor_name: 'Test Broken Shopify Vendor',\n    data_source_type: 'shopify',\n    tier_used: 2,\n    source_url: 'https://invalid-store.myshopify.com',\n    fallback_to_tier3: false,\n    _test_should_fail: true\n  },\n  {\n    vendor_id: 'test_vendor_010',\n    vendor_name: 'Test Mixed Vendor',\n    data_source_type: 'sheets',\n    tier_used: 1,\n    source_url: 'test_sheet_id_2',\n    fallback_to_tier3: false\n  }\n];\n\nreturn testVendors.map(v => ({ json: v }));"
+      },
+      "id": "create-test-vendors",
+      "name": "Create Test Vendors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Generate 10 test vendors (2 intentionally broken)"
+    },
+    {
+      "parameters": {
+        "workflowId": "={{ 'weekly_sync' }}"
+      },
+      "id": "call-weekly-sync",
+      "name": "Call Weekly Sync",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "notes": "Execute the main weekly sync workflow"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate test results\nconst results = $input.all();\n\nconst validation = {\n  total_vendors_processed: results.length,\n  expected_vendors: 10,\n  successful_syncs: results.filter(r => r.json.sync_status === 'success').length,\n  failed_syncs: results.filter(r => r.json.sync_status === 'failed').length,\n  expected_failures: 2,\n  tier1_processed: results.filter(r => r.json.tier_used === 1).length,\n  tier2_processed: results.filter(r => r.json.tier_used === 2).length,\n  tier3_processed: results.filter(r => r.json.tier_used === 3).length,\n  total_products_added: results.reduce((sum, r) => sum + (r.json.products_added || 0), 0),\n  total_products_updated: results.reduce((sum, r) => sum + (r.json.products_updated || 0), 0),\n  notifications_sent: results.filter(r => r.json.notification_sent).length\n};\n\n// Check if test passed\nconst testPassed = \n  validation.total_vendors_processed === validation.expected_vendors &&\n  validation.failed_syncs === validation.expected_failures &&\n  validation.successful_syncs === (validation.expected_vendors - validation.expected_failures);\n\nreturn [{\n  json: {\n    ...validation,\n    test_passed: testPassed,\n    test_timestamp: new Date().toISOString(),\n    test_summary: testPassed ? \n      '✅ All tests passed! Weekly sync workflow is functioning correctly.' :\n      '❌ Test failed! Review the validation results for details.'\n  }\n}];"
+      },
+      "id": "validate-results",
+      "name": "Validate Test Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Verify test results meet expectations"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.test_passed }}",
+              "operation": "equals",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "test-passed",
+      "name": "Test Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "notes": "Check if all tests passed"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format success message\nconst results = $input.first().json;\n\nconst message = `\n✅ **Weekly Sync Test PASSED**\n\n**Test Summary:**\n- Total Vendors: ${results.total_vendors_processed}/${results.expected_vendors}\n- Successful Syncs: ${results.successful_syncs}\n- Failed Syncs: ${results.failed_syncs}/${results.expected_failures} (expected)\n- Tier 1 Processed: ${results.tier1_processed}\n- Tier 2 Processed: ${results.tier2_processed}\n- Tier 3 Processed: ${results.tier3_processed}\n- Products Added: ${results.total_products_added}\n- Products Updated: ${results.total_products_updated}\n- Notifications Sent: ${results.notifications_sent}\n\n**Status:** All systems operational ✅\n**Time:** ${new Date().toLocaleString()}\n`;\n\nconsole.log(message);\nreturn [{ json: { message, status: 'success' } }];"
+      },
+      "id": "format-success",
+      "name": "Format Success Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 200],
+      "notes": "Create success message"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format failure message\nconst results = $input.first().json;\n\nconst message = `\n❌ **Weekly Sync Test FAILED**\n\n**Test Summary:**\n- Total Vendors: ${results.total_vendors_processed}/${results.expected_vendors}\n- Successful Syncs: ${results.successful_syncs}\n- Failed Syncs: ${results.failed_syncs} (expected ${results.expected_failures})\n- Tier 1 Processed: ${results.tier1_processed}\n- Tier 2 Processed: ${results.tier2_processed}\n- Tier 3 Processed: ${results.tier3_processed}\n\n**Issues Detected:**\n${results.total_vendors_processed !== results.expected_vendors ? '- Vendor count mismatch\\n' : ''}\n${results.failed_syncs !== results.expected_failures ? '- Unexpected failure count\\n' : ''}\n\n**Action Required:** Review workflow logs and fix issues\n**Time:** ${new Date().toLocaleString()}\n`;\n\nconsole.error(message);\nreturn [{ json: { message, status: 'failed' } }];"
+      },
+      "id": "format-failure",
+      "name": "Format Failure Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400],
+      "notes": "Create failure message"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Create Test Vendors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Test Vendors": {
+      "main": [
+        [
+          {
+            "node": "Call Weekly Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Weekly Sync": {
+      "main": [
+        [
+          {
+            "node": "Validate Test Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Test Results": {
+      "main": [
+        [
+          {
+            "node": "Test Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Passed?": {
+      "main": [
+        [
+          {
+            "node": "Format Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Failure Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["test"],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:26:00.000Z",
+  "versionId": "1"
+}
+
