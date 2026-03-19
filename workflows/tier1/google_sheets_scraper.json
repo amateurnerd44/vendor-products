@@ -1,0 +1,184 @@
+{
+  "name": "Tier 1: Google Sheets Scraper",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "sheetId": "={{ $json.vendor_config.source_url }}",
+        "options": {
+          "range": "",
+          "returnAllMatches": true
+        }
+      },
+      "id": "read-sheet",
+      "name": "Read Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [450, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Auto-detect column structure\n// Look for common column names: SKU, Name, Images, Videos, Description\n\nconst items = $input.all();\n\nif (items.length === 0) {\n  return [];\n}\n\n// Get the first row to detect column names\nconst firstRow = items[0].json;\nconst columnNames = Object.keys(firstRow);\n\n// Map common variations to standard names\nconst columnMap = {\n  sku: ['sku', 'item', 'item_number', 'product_id', 'product_code', 'code'],\n  name: ['name', 'product_name', 'title', 'product_title', 'description'],\n  images: ['images', 'image', 'image_urls', 'image_url', 'photos', 'pictures'],\n  videos: ['videos', 'video', 'video_urls', 'video_url'],\n  description: ['description', 'marketing_copy', 'copy', 'details', 'product_description'],\n  price: ['price', 'cost', 'msrp', 'retail_price']\n};\n\n// Detect which columns map to which fields\nconst detectedColumns = {};\n\nfor (const [standardName, variations] of Object.entries(columnMap)) {\n  for (const colName of columnNames) {\n    const normalizedCol = colName.toLowerCase().trim();\n    if (variations.includes(normalizedCol)) {\n      detectedColumns[standardName] = colName;\n      break;\n    }\n  }\n}\n\n// Store detected columns for next node\nreturn [{\n  json: {\n    detected_columns: detectedColumns,\n    total_rows: items.length,\n    column_names: columnNames,\n    vendor_id: $('Start').first().json.vendor_id\n  }\n}];"
+      },
+      "id": "detect-columns",
+      "name": "Auto-Detect Columns",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "sheetId": "={{ $('Start').first().json.vendor_config.source_url }}",
+        "options": {
+          "range": "",
+          "returnAllMatches": true
+        }
+      },
+      "id": "read-sheet-again",
+      "name": "Read Sheet Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [850, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "1",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse sheet data using detected columns\n// Handle comma-separated URLs\n\nconst detectedColumns = $('Auto-Detect Columns').first().json.detected_columns;\nconst vendorId = $('Auto-Detect Columns').first().json.vendor_id;\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const row = item.json;\n  \n  // Extract SKU (required)\n  const skuCol = detectedColumns.sku;\n  if (!skuCol || !row[skuCol]) {\n    continue; // Skip rows without SKU\n  }\n  \n  const sku = String(row[skuCol]).trim().toUpperCase();\n  \n  // Extract name\n  const nameCol = detectedColumns.name;\n  const productName = nameCol && row[nameCol] ? String(row[nameCol]).trim() : '';\n  \n  // Extract and parse image URLs (comma-separated)\n  const imagesCol = detectedColumns.images;\n  let imageUrls = [];\n  if (imagesCol && row[imagesCol]) {\n    const imageStr = String(row[imagesCol]).trim();\n    imageUrls = imageStr.split(',').map(url => ({\n      url: url.trim(),\n      type: 'image'\n    })).filter(img => img.url);\n  }\n  \n  // Extract and parse video URLs (comma-separated)\n  const videosCol = detectedColumns.videos;\n  let videoUrls = [];\n  if (videosCol && row[videosCol]) {\n    const videoStr = String(row[videosCol]).trim();\n    videoUrls = videoStr.split(',').map(url => ({\n      url: url.trim(),\n      type: 'video'\n    })).filter(vid => vid.url);\n  }\n  \n  // Extract description/marketing copy\n  const descCol = detectedColumns.description;\n  const marketingCopy = descCol && row[descCol] ? String(row[descCol]).trim() : '';\n  \n  // Extract price if available\n  const priceCol = detectedColumns.price;\n  const price = priceCol && row[priceCol] ? String(row[priceCol]).trim() : null;\n  \n  results.push({\n    json: {\n      sku: sku,\n      product_name: productName,\n      image_urls: imageUrls,\n      video_urls: videoUrls,\n      marketing_copy: marketingCopy,\n      vendor_id: vendorId,\n      source_tier: 1,\n      metadata: {\n        source: 'google_sheets',\n        total_images: imageUrls.length,\n        total_videos: videoUrls.length,\n        price: price,\n        detected_columns: detectedColumns\n      },\n      last_updated: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "parse-sheet-data",
+      "name": "Parse Sheet Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Handle multi-sheet structures\n// Check if there are multiple sheets in the spreadsheet\n\nconst items = $input.all();\nconst results = [];\n\n// Group by SKU in case there are duplicates across sheets\nconst productMap = {};\n\nfor (const item of items) {\n  const sku = item.json.sku;\n  \n  if (!productMap[sku]) {\n    productMap[sku] = item.json;\n  } else {\n    // Merge data if SKU already exists\n    const existing = productMap[sku];\n    \n    // Merge image URLs\n    existing.image_urls = [...existing.image_urls, ...item.json.image_urls];\n    \n    // Merge video URLs\n    existing.video_urls = [...existing.video_urls, ...item.json.video_urls];\n    \n    // Use longer marketing copy\n    if (item.json.marketing_copy.length > existing.marketing_copy.length) {\n      existing.marketing_copy = item.json.marketing_copy;\n    }\n    \n    // Update metadata\n    existing.metadata.total_images = existing.image_urls.length;\n    existing.metadata.total_videos = existing.video_urls.length;\n  }\n}\n\n// Convert back to array\nfor (const sku in productMap) {\n  results.push({ json: productMap[sku] });\n}\n\nreturn results;"
+      },
+      "id": "handle-multi-sheet",
+      "name": "Handle Multi-Sheet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "table": "product_data",
+        "matchFields": ["sku"],
+        "dataToInsert": "={{ $json }}"
+      },
+      "id": "save-to-table",
+      "name": "Save to Product Data Table",
+      "type": "n8n-nodes-base.n8nDataTable",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Read Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "Auto-Detect Columns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-Detect Columns": {
+      "main": [
+        [
+          {
+            "node": "Read Sheet Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sheet Data": {
+      "main": [
+        [
+          {
+            "node": "Parse Sheet Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sheet Data": {
+      "main": [
+        [
+          {
+            "node": "Handle Multi-Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Multi-Sheet": {
+      "main": [
+        [
+          {
+            "node": "Save to Product Data Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "tier1",
+      "id": "1"
+    },
+    {
+      "name": "scraper",
+      "id": "2"
+    }
+  ],
+  "meta": {
+    "instanceId": "n8n-cloud"
+  }
+}
+
