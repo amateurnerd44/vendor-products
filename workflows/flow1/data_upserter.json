@@ -1,0 +1,379 @@
+{
+  "name": "Flow 1: Data Upserter",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Receive products from scraper\nconst products = $input.all();\nconst vendorId = products[0]?.json?.vendor_id;\nconst markettimeSKUs = $workflow.staticData.markettime_skus || [];\n\n// Add metadata to each product\nreturn products.map(product => ({\n  json: {\n    ...product.json,\n    is_new_markettime_item: markettimeSKUs.includes(product.json.sku),\n    upsert_timestamp: new Date().toISOString()\n  }\n}));"
+      },
+      "id": "prepare-products",
+      "name": "Prepare Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Add metadata and check against MarketTime list"
+    },
+    {
+      "parameters": {
+        "batchSize": 50,
+        "options": {}
+      },
+      "id": "batch-products",
+      "name": "Batch Products (50)",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "notes": "Process 50 products at a time for efficiency"
+    },
+    {
+      "parameters": {
+        "operation": "getRow",
+        "tableId": "product_data",
+        "options": {
+          "queryParameterName": "sku",
+          "queryParameterValue": "={{ $json.sku }}"
+        }
+      },
+      "id": "check-sku-exists",
+      "name": "Check if SKU Exists",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "notes": "Query product_data table for existing SKU",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.error }}",
+              "operation": "exists"
+            }
+          ]
+        }
+      },
+      "id": "sku-not-found",
+      "name": "SKU Not Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "notes": "Check if SKU doesn't exist (error means not found)"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "product_data",
+        "dataMode": "autoMapInputData"
+      },
+      "id": "insert-new-product",
+      "name": "Insert New Product",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [1250, 200],
+      "notes": "Insert new product into database"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check if incoming data is newer than existing data\nconst incomingProduct = $input.first().json;\nconst existingProduct = $node['Check if SKU Exists'].json;\n\nconst incomingDate = new Date(incomingProduct.last_updated || incomingProduct.upsert_timestamp);\nconst existingDate = new Date(existingProduct.last_updated);\n\nconst shouldUpdate = incomingDate > existingDate;\n\nreturn [{\n  json: {\n    ...incomingProduct,\n    should_update: shouldUpdate,\n    existing_date: existingDate.toISOString(),\n    incoming_date: incomingDate.toISOString()\n  }\n}];"
+      },
+      "id": "check-if-newer",
+      "name": "Check if Newer Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 400],
+      "notes": "Compare timestamps to see if update is needed"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.should_update }}",
+              "operation": "equals",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "should-update",
+      "name": "Should Update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1450, 400],
+      "notes": "Only update if data is newer"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "product_data",
+        "dataMode": "autoMapInputData",
+        "options": {
+          "queryParameterName": "sku",
+          "queryParameterValue": "={{ $json.sku }}"
+        }
+      },
+      "id": "update-existing-product",
+      "name": "Update Existing Product",
+      "type": "n8n-nodes-base.n8nTable",
+      "typeVersion": 1,
+      "position": [1650, 350],
+      "notes": "Update existing product with newer data"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Tag the result with action taken\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    action: 'inserted',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "tag-inserted",
+      "name": "Tag as Inserted",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 200],
+      "notes": "Mark product as newly inserted"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Tag the result with action taken\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    action: 'updated',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "tag-updated",
+      "name": "Tag as Updated",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 350],
+      "notes": "Mark product as updated"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Tag the result with action taken\nconst item = $input.first().json;\nreturn [{\n  json: {\n    ...item,\n    action: 'skipped',\n    reason: 'data_not_newer',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "tag-skipped",
+      "name": "Tag as Skipped",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 450],
+      "notes": "Mark product as skipped (not newer)"
+    },
+    {
+      "parameters": {},
+      "id": "merge-results",
+      "name": "Merge All Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [2050, 350],
+      "notes": "Combine all insert/update/skip results"
+    },
+    {
+      "parameters": {},
+      "id": "merge-back-to-batch",
+      "name": "Merge Back to Batch",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [2250, 350],
+      "notes": "Send results back to batch loop"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Aggregate upsert statistics\nconst allResults = $input.all();\n\nconst stats = {\n  total_processed: allResults.length,\n  products_added: allResults.filter(r => r.json.action === 'inserted').length,\n  products_updated: allResults.filter(r => r.json.action === 'updated').length,\n  products_skipped: allResults.filter(r => r.json.action === 'skipped').length,\n  new_markettime_items: allResults.filter(r => r.json.is_new_markettime_item).length,\n  vendor_id: allResults[0]?.json?.vendor_id,\n  timestamp: new Date().toISOString()\n};\n\nreturn [{ json: stats }];"
+      },
+      "id": "aggregate-stats",
+      "name": "Aggregate Statistics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 350],
+      "notes": "Calculate final upsert statistics"
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Prepare Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Products": {
+      "main": [
+        [
+          {
+            "node": "Batch Products (50)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Batch Products (50)": {
+      "main": [
+        [
+          {
+            "node": "Check if SKU Exists",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if SKU Exists": {
+      "main": [
+        [
+          {
+            "node": "SKU Not Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SKU Not Found?": {
+      "main": [
+        [
+          {
+            "node": "Insert New Product",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check if Newer Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert New Product": {
+      "main": [
+        [
+          {
+            "node": "Tag as Inserted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Newer Data": {
+      "main": [
+        [
+          {
+            "node": "Should Update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Should Update?": {
+      "main": [
+        [
+          {
+            "node": "Update Existing Product",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tag as Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Existing Product": {
+      "main": [
+        [
+          {
+            "node": "Tag as Updated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag as Inserted": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag as Updated": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Tag as Skipped": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge All Results": {
+      "main": [
+        [
+          {
+            "node": "Merge Back to Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Back to Batch": {
+      "main": [
+        [
+          {
+            "node": "Batch Products (50)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:26:00.000Z",
+  "versionId": "1"
+}
+
