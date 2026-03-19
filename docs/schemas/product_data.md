@@ -1,467 +1,550 @@
 # Product Data Table Schema
 
 ## Overview
-The `product_data` table stores all collected product information from vendors. This is the primary data store for product images, videos, marketing copy, and metadata that will be delivered to customers during order fulfillment.
+The `product_data` table stores all collected product information from vendors. This schema is specifically designed for board game and toy products, with fields for game mechanics, player counts, complexity ratings, and BoardGameGeek (BGG) integration.
+
+**Note:** This is the ACTUAL schema currently implemented in n8n, not a theoretical design.
 
 ## Table Name
-`product_data`
+`Products List` (n8n Data Table)
 
-## Schema Definition
+## Schema Definition (31 Fields)
 
 | Field Name | Data Type | Constraints | Description |
 |------------|-----------|-------------|-------------|
-| `sku` | Text | PRIMARY KEY | Unique product SKU (Stock Keeping Unit) identifier |
-| `vendor_id` | Text | NOT NULL, FOREIGN KEY | Reference to vendor_config.vendor_id |
-| `product_name` | Text | NOT NULL | Product name/title |
-| `image_urls` | JSON | NULLABLE | Array of image URLs for the product |
-| `video_urls` | JSON | NULLABLE | Array of video URLs for the product |
-| `marketing_copy` | Long Text | NULLABLE | Product description, marketing text, specifications |
-| `metadata` | JSON | NULLABLE | Additional product metadata (price, dimensions, tags, etc.) |
-| `last_updated` | DateTime | NOT NULL | Timestamp of when this product data was last updated |
-| `source_tier` | Number | NOT NULL | Tier used to collect this data: 1, 2, or 3 |
+| `id` | Number | PRIMARY KEY, AUTO_INCREMENT | Unique internal identifier |
+| `UPC` | Text | NULLABLE | Universal Product Code (12-digit barcode) |
+| `EAN` | Text | NULLABLE | European Article Number (13-digit barcode) |
+| `SKU` | Text | UNIQUE, NOT NULL | Stock Keeping Unit - vendor's product identifier |
+| `MSRP` | Number | NULLABLE | Manufacturer's Suggested Retail Price |
+| `MAP` | Number | NULLABLE | Minimum Advertised Price |
+| `Cost` | Number | NULLABLE | Wholesale cost from vendor |
+| `Case` | Number | NULLABLE | Number of units per case |
+| `MOQ` | Number | NULLABLE | Minimum Order Quantity |
+| `Increments_Above_MOQ` | Number | NULLABLE | Order increment above MOQ (e.g., order in multiples of 6) |
+| `Weight_lbs` | Number | NULLABLE | Product weight in pounds |
+| `Length_in` | Number | NULLABLE | Package length in inches |
+| `Width_in` | Number | NULLABLE | Package width in inches |
+| `Height_in` | Number | NULLABLE | Package height in inches |
+| `Shopify_ID` | Text | NULLABLE | Shopify product ID for integration |
+| `ClickUp_ID` | Text | NULLABLE | ClickUp task/item ID for project management |
+| `Name` | Text | NOT NULL | Product name/title |
+| `Copy_html` | Long Text | NULLABLE | Product description in HTML format |
+| `Tagline` | Text | NULLABLE | Short marketing tagline or subtitle |
+| `Ages_text` | Text | NULLABLE | Recommended age range (e.g., "8+", "10-14") |
+| `keywords_list` | Text | NULLABLE | Comma-separated keywords for search/SEO |
+| `Player_Count_text` | Text | NULLABLE | Number of players (e.g., "2-4", "1-6") |
+| `Piece_Count_text` | Text | NULLABLE | Number of game pieces/components |
+| `Play_Time` | Text | NULLABLE | Average play time (e.g., "30 minutes", "45-60 min") |
+| `BGG_weight` | Number | NULLABLE | BoardGameGeek complexity rating (1.0-5.0) |
+| `Mechanics_list` | Text | NULLABLE | Comma-separated game mechanics (from BGG) |
+| `Rules_url` | Text | NULLABLE | URL to rulebook PDF or rules page |
+| `Category_list` | Text | NULLABLE | Comma-separated product categories |
+| `Shopify_Vendor_Id` | Text | NULLABLE | Shopify vendor ID (replaces separate vendor_config table) |
+| `createdAt` | DateTime | NOT NULL, AUTO | Timestamp when record was created |
+| `updatedAt` | DateTime | NOT NULL, AUTO | Timestamp when record was last updated |
+
+---
 
 ## Field Details
 
-### sku
-- **Format**: Alphanumeric string, vendor-specific format
-- **Purpose**: Primary key for product lookup during order fulfillment
-- **Examples**: "ACME-12345", "PROD-ABC-001", "SKU123456"
-- **Uniqueness**: Must be globally unique across all vendors
-- **Case Sensitivity**: Recommend storing in uppercase for consistency
-- **Validation**: Should not contain special characters that break URLs
+### Core Identifiers
 
-### vendor_id
-- **Format**: `vendor_XXX` matching vendor_config.vendor_id
-- **Purpose**: Links product to its vendor for relationship tracking
-- **Foreign Key**: References `vendor_config.vendor_id`
-- **Required**: Cannot be null
-- **Usage**: Used to filter products by vendor, track vendor catalog size
+#### id
+- **Type**: Auto-incrementing number
+- **Purpose**: Internal database primary key
+- **Auto-generated**: Yes
+- **Usage**: Internal references only, not exposed to users
 
-### product_name
-- **Format**: Free text, typically 50-200 characters
-- **Purpose**: Human-readable product identifier
-- **Examples**: 
-  - "Acme Widget Pro 3000"
-  - "Blue Cotton T-Shirt - Size L"
-  - "Industrial Bearing Set (10-pack)"
-- **Required**: Cannot be null
-- **Searchability**: Should be indexed for product search functionality
+#### UPC
+- **Format**: 12-digit numeric string
+- **Purpose**: Universal Product Code for retail scanning
+- **Example**: "123456789125"
+- **Nullable**: Yes (not all products have UPCs)
+- **Validation**: Should be 12 digits if provided
 
-### image_urls
-- **Format**: JSON array of URL strings
-- **Structure**:
-  ```json
-  [
-    "https://cdn.vendor.com/images/product1-main.jpg",
-    "https://cdn.vendor.com/images/product1-alt1.jpg",
-    "https://cdn.vendor.com/images/product1-alt2.jpg"
-  ]
-  ```
-- **Purpose**: Store all product images for customer delivery
-- **Nullable**: Can be empty array `[]` or null if no images available
-- **Order**: First image is typically the primary/hero image
-- **Validation**: URLs should be accessible and return valid image content
-- **Supported Formats**: JPG, PNG, WebP, GIF
+#### EAN
+- **Format**: 13-digit numeric string
+- **Purpose**: European Article Number (international barcode)
+- **Example**: "1234567891234"
+- **Nullable**: Yes
+- **Note**: Often used for international products
 
-### video_urls
-- **Format**: JSON array of URL strings
-- **Structure**:
-  ```json
-  [
-    "https://youtube.com/watch?v=ABC123",
-    "https://vimeo.com/123456789",
-    "https://cdn.vendor.com/videos/product-demo.mp4"
-  ]
-  ```
-- **Purpose**: Store product videos for customer delivery
-- **Nullable**: Can be empty array `[]` or null if no videos available
-- **Supported Platforms**: YouTube, Vimeo, direct MP4/MOV links
-- **Validation**: URLs should be accessible
+#### SKU
+- **Format**: Alphanumeric string, vendor-specific
+- **Purpose**: Primary product identifier for ordering and inventory
+- **Examples**: "ST1234", "ACME-WIDGET-001", "BGG-12345"
+- **Required**: Yes (cannot be null)
+- **Uniqueness**: Should be unique across all products
+- **Usage**: Primary lookup field for order fulfillment
 
-### marketing_copy
-- **Format**: Long text, supports markdown
-- **Purpose**: Store product descriptions, specifications, marketing text
-- **Content Types**:
-  - Product descriptions
-  - Technical specifications
-  - Features and benefits
-  - Usage instructions
-  - Warranty information
-- **Nullable**: Can be null if no copy available
-- **Length**: No strict limit, but typically 500-5000 characters
-- **Formatting**: Preserve line breaks and basic formatting
+---
 
-### metadata
-- **Format**: JSON object with flexible schema
-- **Purpose**: Store additional product information not covered by other fields
-- **Common Fields**:
-  ```json
-  {
-    "price": 29.99,
-    "currency": "USD",
-    "dimensions": {
-      "length": 10,
-      "width": 5,
-      "height": 3,
-      "unit": "inches"
-    },
-    "weight": {
-      "value": 2.5,
-      "unit": "lbs"
-    },
-    "tags": ["electronics", "gadgets", "bestseller"],
-    "category": "Electronics > Gadgets",
-    "brand": "Acme",
-    "color": "Blue",
-    "size": "Large",
-    "material": "Plastic",
-    "in_stock": true,
-    "stock_quantity": 150,
-    "upc": "012345678901",
-    "manufacturer_sku": "MFG-12345"
-  }
-  ```
-- **Nullable**: Can be null or empty object `{}`
-- **Flexibility**: Schema can vary by vendor and product type
-- **Extensibility**: Easy to add new fields without schema changes
+### Pricing Fields
 
-### last_updated
-- **Format**: ISO 8601 DateTime (e.g., "2026-03-19T14:30:00Z")
-- **Purpose**: Track data freshness for cache invalidation
-- **Required**: Cannot be null
-- **Updated**: Set to current timestamp whenever product data is updated
-- **Usage**: 
-  - Determine if product needs re-sync
-  - Show data age in reports
-  - Trigger alerts for stale data (>30 days)
+#### MSRP
+- **Type**: Decimal number (currency)
+- **Purpose**: Manufacturer's Suggested Retail Price
+- **Example**: 10.99
+- **Nullable**: Yes
+- **Usage**: Reference pricing, margin calculations
 
-### source_tier
-- **Valid Values**: 1, 2, or 3
-- **Purpose**: Track which data collection method was used
-- **Tier Definitions**:
-  - **Tier 1**: Direct integration (Drive/Dropbox/Sheets) - FREE
-  - **Tier 2**: Shopify JSON endpoint - FREE
-  - **Tier 3**: Zyte API + Gemini AI - USAGE-BASED COST
-- **Usage**: Cost analysis, quality tracking, optimization decisions
-- **Required**: Cannot be null
+#### MAP
+- **Type**: Decimal number (currency)
+- **Purpose**: Minimum Advertised Price (vendor restriction)
+- **Example**: 10.99
+- **Nullable**: Yes
+- **Important**: Must not advertise below this price if set
 
-## Relationships
+#### Cost
+- **Type**: Decimal number (currency)
+- **Purpose**: Wholesale cost from vendor
+- **Example**: 5.50
+- **Nullable**: Yes
+- **Confidential**: Should not be exposed to customers
 
-### Foreign Key References
-- `vendor_id` references `vendor_config.vendor_id` (many-to-one)
+---
 
-### Referenced By
-- Order fulfillment workflows query by `sku`
-- Sync workflows update by `sku` and `vendor_id`
+### Inventory & Logistics
 
-## Indexes
+#### Case
+- **Type**: Integer
+- **Purpose**: Number of units per case pack
+- **Example**: 6 (product ships in cases of 6)
+- **Nullable**: Yes
+- **Usage**: Inventory management, shipping calculations
 
-### Recommended Indexes
-1. **Primary Key**: `sku` (automatic)
-2. **Vendor Lookup**: `vendor_id` (for vendor-specific queries)
-3. **Freshness**: `last_updated` (for finding stale products)
-4. **Tier Analysis**: `source_tier` (for cost tracking)
-5. **Composite**: `(vendor_id, last_updated)` (for vendor sync optimization)
+#### MOQ
+- **Type**: Integer
+- **Purpose**: Minimum Order Quantity from vendor
+- **Example**: 6 (must order at least 6 units)
+- **Nullable**: Yes
+- **Usage**: Order validation, vendor compliance
 
-## Usage Examples
+#### Increments_Above_MOQ
+- **Type**: Integer
+- **Purpose**: Order increment above MOQ
+- **Example**: 6 (after MOQ, order in multiples of 6)
+- **Nullable**: Yes
+- **Usage**: Order quantity validation
 
-### Adding a Product (Tier 1 - Google Drive)
-```json
-{
-  "sku": "ACME-WIDGET-001",
-  "vendor_id": "vendor_001",
-  "product_name": "Acme Widget Pro 3000",
-  "image_urls": [
-    "https://drive.google.com/uc?id=ABC123",
-    "https://drive.google.com/uc?id=DEF456"
-  ],
-  "video_urls": [
-    "https://youtube.com/watch?v=XYZ789"
-  ],
-  "marketing_copy": "The Acme Widget Pro 3000 is the ultimate solution for all your widget needs. Features include:\n- Durable construction\n- Easy to use\n- 5-year warranty",
-  "metadata": {
-    "price": 149.99,
-    "currency": "USD",
-    "category": "Widgets > Professional",
-    "in_stock": true
-  },
-  "last_updated": "2026-03-19T14:30:00Z",
-  "source_tier": 1
-}
-```
+#### Weight_lbs
+- **Type**: Decimal number
+- **Purpose**: Product weight in pounds
+- **Example**: 2.3
+- **Nullable**: Yes
+- **Usage**: Shipping cost calculations
 
-### Adding a Product (Tier 2 - Shopify)
-```json
-{
-  "sku": "BETA-SUPPLY-42",
-  "vendor_id": "vendor_002",
-  "product_name": "Industrial Bearing Set",
-  "image_urls": [
-    "https://cdn.shopify.com/s/files/1/0123/4567/products/bearing-main.jpg",
-    "https://cdn.shopify.com/s/files/1/0123/4567/products/bearing-detail.jpg"
-  ],
-  "video_urls": [],
-  "marketing_copy": "High-quality industrial bearings suitable for heavy machinery. Set includes 10 bearings of various sizes.",
-  "metadata": {
-    "price": 89.99,
-    "currency": "USD",
-    "shopify_product_id": 1234567890,
-    "shopify_handle": "industrial-bearing-set",
-    "tags": ["industrial", "bearings", "machinery"],
-    "variants": [
-      {"size": "small", "sku": "BETA-SUPPLY-42-S"},
-      {"size": "large", "sku": "BETA-SUPPLY-42-L"}
-    ]
-  },
-  "last_updated": "2026-03-19T14:35:00Z",
-  "source_tier": 2
-}
-```
+#### Length_in, Width_in, Height_in
+- **Type**: Decimal numbers
+- **Purpose**: Package dimensions in inches
+- **Examples**: 5, 5, 2 (5"x5"x2" box)
+- **Nullable**: Yes
+- **Usage**: Shipping calculations, warehouse storage
 
-### Adding a Product (Tier 3 - Website Scraping)
-```json
-{
-  "sku": "EPSILON-TOOL-999",
-  "vendor_id": "vendor_005",
-  "product_name": "Professional Power Drill",
-  "image_urls": [
-    "https://epsilon-wholesale.com/images/drill-main.jpg",
-    "https://epsilon-wholesale.com/images/drill-side.jpg",
-    "https://epsilon-wholesale.com/images/drill-accessories.jpg"
-  ],
-  "video_urls": [
-    "https://epsilon-wholesale.com/videos/drill-demo.mp4"
-  ],
-  "marketing_copy": "Professional-grade power drill with variable speed control and ergonomic design. Perfect for contractors and DIY enthusiasts.",
-  "metadata": {
-    "price": 199.99,
-    "currency": "USD",
-    "extracted_by": "gemini-1.5-pro",
-    "extraction_confidence": 0.95,
-    "source_url": "https://epsilon-wholesale.com/products/power-drill-999",
-    "scraped_at": "2026-03-19T14:40:00Z"
-  },
-  "last_updated": "2026-03-19T14:40:00Z",
-  "source_tier": 3
-}
-```
+---
 
-## n8n Implementation Notes
+### Integration IDs
 
-### Creating the Table in n8n
-1. Navigate to **Data** → **Data Tables** in n8n Cloud
-2. Click **Create Table**
-3. Name: `product_data`
-4. Add fields according to schema above
-5. Set `sku` as Primary Key
-6. Create index on `vendor_id` for performance
+#### Shopify_ID
+- **Type**: Text (numeric string)
+- **Purpose**: Shopify product ID for sync
+- **Example**: "1535781596463"
+- **Nullable**: Yes
+- **Usage**: Bi-directional sync with Shopify store
 
-### Querying Products by SKU
-```javascript
-// Single SKU lookup (order fulfillment)
-const product = $('Data Table').get({ sku: 'ACME-WIDGET-001' });
+#### ClickUp_ID
+- **Type**: Text
+- **Purpose**: ClickUp task/item ID for project management
+- **Example**: "EM-4567"
+- **Nullable**: Yes
+- **Usage**: Link products to ClickUp tasks/projects
 
-// Multiple SKUs lookup
-const skus = ['SKU1', 'SKU2', 'SKU3'];
-const products = $('Data Table').all().filter(p => skus.includes(p.sku));
-```
+#### Shopify_Vendor_Id
+- **Type**: Text (numeric string)
+- **Purpose**: Links product to Shopify vendor
+- **Nullable**: Yes
+- **Important**: Replaces need for separate vendor_config table
+- **Usage**: Vendor filtering, vendor-specific operations
 
-### Updating Product Data
-```javascript
-// Upsert pattern (update if exists, insert if not)
-const productData = {
-  sku: 'ACME-WIDGET-001',
-  vendor_id: 'vendor_001',
-  product_name: 'Updated Product Name',
-  image_urls: ['https://new-image.jpg'],
-  video_urls: [],
-  marketing_copy: 'Updated description',
-  metadata: { price: 159.99 },
-  last_updated: new Date().toISOString(),
-  source_tier: 1
-};
+---
 
-// Check if exists
-const existing = $('Data Table').get({ sku: productData.sku });
-if (existing) {
-  $('Data Table').update(productData);
-} else {
-  $('Data Table').insert(productData);
-}
-```
+### Product Information
 
-### Finding Stale Products
-```javascript
-// Find products not updated in 30 days
-const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-const staleProducts = $('Data Table').all().filter(p => 
-  new Date(p.last_updated) < thirtyDaysAgo
-);
-```
+#### Name
+- **Type**: Text
+- **Purpose**: Product name/title
+- **Example**: "Catan Board Game"
+- **Required**: Yes (cannot be null)
+- **Usage**: Display, search, ordering
+
+#### Copy_html
+- **Type**: Long text (HTML)
+- **Purpose**: Full product description with HTML formatting
+- **Example**: `<p>Marketing Info</p><ul><li>Feature 1</li></ul>`
+- **Nullable**: Yes
+- **Format**: HTML markup allowed
+- **Usage**: Product pages, marketing materials
+
+#### Tagline
+- **Type**: Text
+- **Purpose**: Short marketing tagline or subtitle
+- **Example**: "The classic game of settlement and trade"
+- **Nullable**: Yes
+- **Length**: Typically 50-100 characters
+- **Usage**: Product listings, search results
+
+---
+
+### Board Game Specific Fields
+
+#### Ages_text
+- **Type**: Text
+- **Purpose**: Recommended age range
+- **Examples**: "8+", "10-14", "Ages 12 and up"
+- **Nullable**: Yes
+- **Format**: Free text (not strictly numeric)
+- **Usage**: Product filtering, compliance
+
+#### Player_Count_text
+- **Type**: Text
+- **Purpose**: Number of players supported
+- **Examples**: "2-4", "1-6", "2-4 players"
+- **Nullable**: Yes
+- **Format**: Free text (allows ranges)
+- **Usage**: Product filtering, game selection
+
+#### Piece_Count_text
+- **Type**: Text
+- **Purpose**: Number of game pieces/components
+- **Example**: "58", "200+ pieces"
+- **Nullable**: Yes
+- **Usage**: Product details, complexity indicator
+
+#### Play_Time
+- **Type**: Text
+- **Purpose**: Average game duration
+- **Examples**: "30 minutes", "45-60 min", "1-2 hours"
+- **Nullable**: Yes
+- **Format**: Free text (allows ranges)
+- **Usage**: Product filtering, game selection
+
+#### BGG_weight
+- **Type**: Decimal number (1.0-5.0)
+- **Purpose**: BoardGameGeek complexity/weight rating
+- **Example**: 1.6 (light-medium complexity)
+- **Nullable**: Yes
+- **Scale**: 1.0 (light) to 5.0 (heavy/complex)
+- **Source**: BoardGameGeek API
+- **Usage**: Complexity filtering, recommendations
+
+#### Mechanics_list
+- **Type**: Text (comma-separated)
+- **Purpose**: Game mechanics from BoardGameGeek
+- **Examples**: "Deck Building, Worker Placement", "Dice Rolling, Set Collection"
+- **Nullable**: Yes
+- **Format**: Comma-separated list
+- **Source**: BoardGameGeek API
+- **Usage**: Product filtering, recommendations
+
+#### Category_list
+- **Type**: Text (comma-separated)
+- **Purpose**: Product categories/genres
+- **Examples**: "Strategy Games, Family Games", "Card Games, Party Games"
+- **Nullable**: Yes
+- **Format**: Comma-separated list
+- **Usage**: Product organization, navigation
+
+#### Rules_url
+- **Type**: Text (URL)
+- **Purpose**: Link to rulebook PDF or rules page
+- **Example**: "https://vendor.com/rules/product-rules.pdf"
+- **Nullable**: Yes
+- **Validation**: Should be valid URL if provided
+- **Usage**: Customer support, product information
+
+---
+
+### Search & Discovery
+
+#### keywords_list
+- **Type**: Text (comma-separated)
+- **Purpose**: Keywords for search and SEO
+- **Example**: "strategy, board game, family, medieval, trading"
+- **Nullable**: Yes
+- **Format**: Comma-separated list
+- **Usage**: Search indexing, SEO optimization
+
+---
+
+### System Fields
+
+#### createdAt
+- **Type**: DateTime (ISO 8601)
+- **Purpose**: Record creation timestamp
+- **Example**: "2026-03-19T15:34:41.255Z"
+- **Required**: Yes
+- **Auto-generated**: Yes (on insert)
+- **Usage**: Audit trail, data freshness tracking
+
+#### updatedAt
+- **Type**: DateTime (ISO 8601)
+- **Purpose**: Last update timestamp
+- **Example**: "2026-03-19T15:39:07.609Z"
+- **Required**: Yes
+- **Auto-updated**: Yes (on every update)
+- **Usage**: Cache invalidation, sync tracking
+
+---
+
+## Data Source Mapping
+
+### Tier 1: Vendor-Supplied Data (Drive/Dropbox/Sheets)
+Vendors may provide data in various formats. Map their fields to this schema:
+
+**Common Vendor Fields → Our Schema:**
+- Product Name → `Name`
+- Description → `Copy_html`
+- Price → `MSRP`
+- Wholesale Price → `Cost`
+- SKU/Item # → `SKU`
+- Barcode → `UPC` or `EAN`
+- Weight → `Weight_lbs`
+- Dimensions → `Length_in`, `Width_in`, `Height_in`
+- Min Order → `MOQ`
+- Case Pack → `Case`
+
+### Tier 2: Shopify Data
+Shopify provides structured data via JSON API:
+
+**Shopify Fields → Our Schema:**
+- `product.id` → `Shopify_ID`
+- `product.title` → `Name`
+- `product.body_html` → `Copy_html`
+- `product.vendor` → `Shopify_Vendor_Id`
+- `variant.sku` → `SKU`
+- `variant.price` → `MSRP`
+- `variant.barcode` → `UPC` or `EAN`
+- `variant.weight` → `Weight_lbs`
+- `product.tags` → `keywords_list`, `Category_list`
+
+### Tier 3: Zyte + AI Scraping
+Use Gemini AI to extract data from vendor websites:
+
+**AI Extraction Targets:**
+- Product title → `Name`
+- Description → `Copy_html`
+- Price → `MSRP`
+- SKU/Item number → `SKU`
+- Specifications → Parse into relevant fields
+- Images → Store URLs separately (not in this table)
+
+### Tier 4: BoardGameGeek API (Enrichment)
+Enrich board game products with BGG data:
+
+**BGG XML API → Our Schema:**
+- `<item><name>` → Validate `Name`
+- `<item><description>` → Enrich `Copy_html`
+- `<item><minplayers>` + `<maxplayers>` → `Player_Count_text`
+- `<item><playingtime>` → `Play_Time`
+- `<item><minage>` → `Ages_text`
+- `<statistics><averageweight>` → `BGG_weight`
+- `<link type="boardgamemechanic">` → `Mechanics_list`
+- `<link type="boardgamecategory">` → `Category_list`
+
+---
 
 ## Validation Rules
 
-### Required Field Validation
-- `sku`: Must not be empty, should be unique
-- `vendor_id`: Must exist in vendor_config table
-- `product_name`: Must not be empty
-- `last_updated`: Must be valid ISO 8601 datetime
-- `source_tier`: Must be 1, 2, or 3
+### Required Fields
+- `SKU` - Must not be empty
+- `Name` - Must not be empty
+- `createdAt` - Auto-generated
+- `updatedAt` - Auto-generated
 
-### Data Quality Validation
-- `image_urls`: If provided, should be valid URLs
-- `video_urls`: If provided, should be valid URLs
-- `metadata`: If provided, must be valid JSON
-- `sku`: Should match vendor's SKU format conventions
+### Recommended Fields
+- At least one of: `UPC`, `EAN`, or `Shopify_ID`
+- At least one of: `MSRP`, `MAP`, or `Cost`
+- `Shopify_Vendor_Id` for vendor tracking
 
-### Business Logic Validation
-- `source_tier` should match the vendor's `tier_used` in vendor_config
-- `last_updated` should not be in the future
-- Products should be re-synced if `last_updated` > 7 days old
+### Data Quality Checks
+- `UPC` should be 12 digits if provided
+- `EAN` should be 13 digits if provided
+- `MSRP` >= `MAP` >= `Cost` (if all provided)
+- `MOQ` <= `Case` (typically)
+- `BGG_weight` should be 1.0-5.0 if provided
+- URLs (`Rules_url`) should be valid if provided
 
-## Data Quality Considerations
+---
 
-### Image URL Validation
-- Verify URLs are accessible (HTTP 200 response)
-- Check image file size (warn if >5MB)
-- Validate image format (JPG, PNG, WebP, GIF)
-- Consider creating thumbnails for large images
+## Usage Examples
 
-### Video URL Validation
-- Verify URLs are accessible
-- Check if video platform is supported (YouTube, Vimeo, direct links)
-- Consider extracting video metadata (duration, resolution)
-
-### Marketing Copy Quality
-- Check for minimum length (e.g., >50 characters)
-- Detect placeholder text ("Lorem ipsum", "TBD", etc.)
-- Flag products with missing copy for review
-
-### Metadata Completeness
-- Track which metadata fields are populated
-- Flag products missing critical fields (price, category)
-- Generate data quality reports by vendor
-
-## Order Fulfillment Integration
-
-### Fast Lookup Pattern
-```javascript
-// Order comes in with SKUs
-const orderSkus = ['SKU1', 'SKU2', 'SKU3'];
-
-// Lookup all products
-const products = [];
-const missingSkus = [];
-
-for (const sku of orderSkus) {
-  const product = $('Data Table').get({ sku: sku });
-  if (product) {
-    products.push(product);
-  } else {
-    missingSkus.push(sku);
-  }
-}
-
-// If missing SKUs, trigger on-demand scraping
-if (missingSkus.length > 0) {
-  // Trigger fallback scraping workflow
-  $('Webhook').call('on-demand-scrape', { skus: missingSkus });
-}
-
-// Compile digital asset package
-const assetPackage = products.map(p => ({
-  sku: p.sku,
-  name: p.product_name,
-  images: p.image_urls,
-  videos: p.video_urls,
-  description: p.marketing_copy
-}));
+### Sample Product Record
+```csv
+id,UPC,EAN,SKU,MSRP,MAP,Cost,Case,MOQ,Increments_Above_MOQ,Weight_lbs,Length_in,Width_in,Height_in,Shopify_ID,ClickUp_ID,Name,Copy_html,Tagline,Ages_text,keywords_list,Player_Count_text,Piece_Count_text,Play_Time,BGG_weight,Mechanics_list,Rules_url,Category_list,Shopify_Vendor_Id,createdAt,updatedAt
+1,1234567891253,,ST1234,10.99,10.99,5.5,6,6,6,2.3,5,5,2,1535781596463,EM-4567,Test Product,Marketing Info,Short tag line,8+,,2-4,58,30 minutes,1.6,,,,,2026-03-19T15:34:41.255Z,2026-03-19T15:39:07.609Z
 ```
 
-## Performance Optimization
+### Inserting a New Product (n8n)
+```javascript
+$('Data Table').insert({
+  SKU: 'CATAN-BASE-001',
+  Name: 'Catan Board Game',
+  Copy_html: '<p>The classic game of settlement and trade</p>',
+  Tagline: 'Build, trade, and settle the island of Catan',
+  MSRP: 44.99,
+  MAP: 39.99,
+  Cost: 22.50,
+  Case: 6,
+  MOQ: 6,
+  Weight_lbs: 2.8,
+  Ages_text: '10+',
+  Player_Count_text: '3-4',
+  Play_Time: '60-120 minutes',
+  BGG_weight: 2.3,
+  Mechanics_list: 'Dice Rolling, Hand Management, Trading',
+  Category_list: 'Strategy Games, Family Games',
+  Shopify_Vendor_Id: '12345678',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString()
+});
+```
 
-### Caching Strategy
-- Cache frequently accessed products in memory
-- Implement TTL based on `last_updated` timestamp
-- Pre-load popular products during off-peak hours
+### Updating a Product
+```javascript
+$('Data Table').update({
+  SKU: 'CATAN-BASE-001',
+  MSRP: 49.99,  // Price increase
+  updatedAt: new Date().toISOString()
+});
+```
 
-### Batch Operations
-- Use batch inserts for weekly sync (faster than individual inserts)
-- Batch update operations for multiple products
-- Use transactions for data consistency
+### Querying Products
+```javascript
+// Get all products from a specific vendor
+const vendorProducts = $('Data Table').all().filter(p => 
+  p.Shopify_Vendor_Id === '12345678'
+);
 
-### Query Optimization
-- Use indexes for common query patterns
-- Avoid full table scans
-- Paginate large result sets
+// Get products by complexity
+const lightGames = $('Data Table').all().filter(p => 
+  p.BGG_weight && p.BGG_weight < 2.0
+);
 
-## Troubleshooting
+// Get products needing BGG enrichment
+const needsBGG = $('Data Table').all().filter(p => 
+  !p.BGG_weight && p.Category_list && p.Category_list.includes('Board Game')
+);
+```
 
-### Common Issues
+---
 
-**Issue**: SKU not found during order fulfillment
-- Check if SKU exists in table
-- Verify SKU format matches vendor's format
-- Check if product was synced recently
-- Trigger on-demand scraping as fallback
+## BoardGameGeek Integration
 
-**Issue**: Image URLs not accessible
-- Verify URLs are still valid
-- Check if vendor changed CDN or hosting
-- Re-sync vendor to get updated URLs
-- Consider downloading and hosting images locally
+### BGG API Overview
+- **Endpoint**: `https://boardgamegeek.com/xmlapi2/thing?id={bgg_id}`
+- **Format**: XML
+- **Rate Limit**: ~2 requests/second (unofficial)
+- **Cost**: FREE
 
-**Issue**: Duplicate SKUs
-- Investigate if multiple vendors use same SKU
-- Implement vendor-specific SKU prefixes
-- Update SKU format to ensure uniqueness
+### BGG Enrichment Workflow
+1. **Identify board games** in product catalog
+2. **Search BGG** by product name or UPC
+3. **Extract BGG ID** from search results
+4. **Fetch game details** via BGG API
+5. **Parse XML** and extract relevant fields
+6. **Update product record** with BGG data
+7. **Cache BGG data** to avoid repeated API calls
 
-**Issue**: Stale product data
-- Check `last_updated` timestamp
-- Verify weekly sync is running
-- Check sync_log for vendor sync failures
-- Manually trigger sync for specific vendor
+### BGG Data Mapping
+```javascript
+// Example BGG XML parsing
+const bggData = parseXML(response);
+const product = {
+  BGG_weight: bggData.statistics.averageweight,
+  Mechanics_list: bggData.mechanics.join(', '),
+  Category_list: bggData.categories.join(', '),
+  Player_Count_text: `${bggData.minplayers}-${bggData.maxplayers}`,
+  Play_Time: `${bggData.playingtime} minutes`,
+  Ages_text: `${bggData.minage}+`
+};
+```
+
+---
+
+## Vendor Management
+
+### Using Shopify Vendors
+Instead of a separate `vendor_config` table, this system uses Shopify's built-in vendor management:
+
+**Advantages:**
+- ✅ No duplicate vendor data
+- ✅ Shopify handles vendor relationships
+- ✅ Simpler data model
+- ✅ Automatic sync with Shopify
+
+**Vendor Operations:**
+```javascript
+// Get all products from a vendor
+const vendorProducts = $('Data Table').all().filter(p => 
+  p.Shopify_Vendor_Id === vendorId
+);
+
+// Get unique vendors
+const vendors = [...new Set(
+  $('Data Table').all().map(p => p.Shopify_Vendor_Id)
+)];
+```
+
+---
 
 ## Migration Notes
 
-### Initial Population
-1. Run initial sync for all vendors
-2. Validate data quality for sample products
-3. Check for duplicate SKUs
-4. Verify image/video URLs are accessible
-5. Generate data quality report
+### Importing Existing Data
+If you have existing product data:
 
-### Data Updates
-- Weekly sync updates existing products and adds new ones
-- Use upsert pattern (update if exists, insert if new)
-- Track changes in sync_log table
-- Archive old product data if needed
+1. **Export to CSV** with matching column headers
+2. **Map fields** to this schema
+3. **Validate data** (required fields, data types)
+4. **Import to n8n** Data Table
+5. **Verify import** with sample queries
 
-## Security Considerations
+### Data Cleanup
+- Remove duplicate SKUs
+- Standardize text formats (Ages, Player Count, Play Time)
+- Validate numeric fields (prices, dimensions)
+- Ensure Shopify_Vendor_Id is populated
 
-### Data Privacy
-- Product data may contain proprietary vendor information
-- Limit access to authorized workflows only
-- Consider data retention policies
-- Comply with vendor data usage agreements
+---
 
-### URL Validation
-- Validate all URLs before storing
-- Sanitize URLs to prevent injection attacks
-- Check for malicious content in images/videos
-- Use HTTPS URLs when possible
+## Performance Considerations
+
+### Indexing
+Recommended indexes for fast queries:
+- `SKU` (primary key, automatic)
+- `Shopify_ID` (for Shopify sync)
+- `Shopify_Vendor_Id` (for vendor filtering)
+- `updatedAt` (for finding stale data)
+
+### Caching
+- Cache BGG data aggressively (rarely changes)
+- Cache vendor product lists (refresh weekly)
+- Cache Shopify sync data (refresh on webhook)
+
+---
 
 ## Change Log
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0 | 2026-03-19 | Initial schema definition |
+| 2.0 | 2026-03-19 | Updated to reflect actual 31-field schema in use |
+| 1.0 | 2026-03-19 | Initial theoretical schema (9 fields) |
 
 ---
 
 **Related Documentation:**
-- [Vendor Config Schema](./vendor_config.md)
-- [Sync Log Schema](./sync_log.md)
-- [Order Fulfillment Workflow](../guides/order_fulfillment.md)
-- [Setup Guide](../guides/SETUP_GUIDE.md)
+- [Vendor Management via Shopify](../guides/shopify_vendor_management.md)
+- [BoardGameGeek Integration](../guides/bgg_integration.md)
+- [Setup Guide](../../SETUP_GUIDE.md)
+- [Implementation Plan](../../IMPLEMENTATION_PLAN.md)
 

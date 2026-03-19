@@ -1,20 +1,23 @@
 # Vendor Product Data Collection System
 
-🎯 **Automated system for collecting product data from 70+ vendors and delivering digital asset packages to customers**
+🎯 **Automated system for collecting board game and toy product data from vendors**
 
 [![Phase 1](https://img.shields.io/badge/Phase%201-Complete-success)](docs/guides/SETUP_GUIDE.md)
 [![n8n](https://img.shields.io/badge/Built%20with-n8n-FF6D5A)](https://n8n.io)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
+> **Note**: This README describes the general system architecture. The actual implementation uses a **31-field product schema** optimized for board games and toys, with **Shopify vendor management** instead of a separate vendor_config table. See [Product Data Schema](docs/schemas/product_data.md) for the real schema.
+
 ---
 
 ## 📋 Overview
 
-This system automates the collection of product data (images, videos, marketing copy, metadata) from multiple vendors using a tiered approach:
+This system automates the collection of board game and toy product data from multiple vendors using a tiered approach:
 
 - **Tier 1** (FREE): Direct integrations with Google Drive, Dropbox, and Google Sheets
 - **Tier 2** (FREE): Shopify public JSON endpoints
 - **Tier 3** (Usage-based): Zyte API + Google AI Studio for web scraping
+- **Tier 4** (FREE): BoardGameGeek (BGG) API for game-specific enrichment
 
 ### Key Features
 
@@ -23,6 +26,8 @@ This system automates the collection of product data (images, videos, marketing 
 ✅ **Fast Order Fulfillment** - <10 seconds for cached products  
 ✅ **Cost Efficient** - ~$222/year for 70 vendors  
 ✅ **Usage-Based Pricing** - No monthly subscriptions  
+✅ **BGG Integration** - Enrich board games with mechanics, categories, complexity ratings  
+✅ **Shopify Vendor Management** - Leverage existing Shopify vendor system  
 
 ---
 
@@ -316,4 +321,3 @@ If you encounter any issues:
 ---
 
 Made with ❤️ using n8n, Zyte, and Google AI
-
