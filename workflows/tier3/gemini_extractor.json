@@ -1,0 +1,327 @@
+{
+  "name": "Tier 3: Gemini Extractor",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "html-input",
+              "name": "html",
+              "value": "={{ $json.html }}",
+              "type": "string"
+            },
+            {
+              "id": "url-input",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "page-type",
+              "name": "pageType",
+              "value": "={{ $json.pageType || 'product' }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-variables",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Load AI prompts from config\nconst fs = require('fs');\nconst promptsPath = '/data/config/ai_prompts.json';\nlet prompts;\n\ntry {\n  const promptsData = fs.readFileSync(promptsPath, 'utf8');\n  prompts = JSON.parse(promptsData);\n} catch (error) {\n  // Fallback to default prompts if file doesn't exist\n  prompts = {\n    \"product\": {\n      \"systemPrompt\": \"You are a product data extraction expert. Extract structured product information from HTML.\",\n      \"userPrompt\": \"Extract the following information from this product page HTML:\\n\\n1. SKU (product code/identifier)\\n2. Product name\\n3. All image URLs (full resolution preferred)\\n4. All video URLs\\n5. Marketing copy/description\\n6. Any additional metadata (price, dimensions, materials, etc.)\\n\\nReturn ONLY valid JSON in this exact format:\\n{\\n  \\\"sku\\\": \\\"string\\\",\\n  \\\"name\\\": \\\"string\\\",\\n  \\\"images\\\": [\\\"url1\\\", \\\"url2\\\"],\\n  \\\"videos\\\": [\\\"url1\\\", \\\"url2\\\"],\\n  \\\"description\\\": \\\"string\\\",\\n  \\\"metadata\\\": {}\\n}\\n\\nHTML:\\n\"\n    },\n    \"catalog\": {\n      \"systemPrompt\": \"You are a product catalog extraction expert. Extract multiple products from catalog pages.\",\n      \"userPrompt\": \"Extract all products from this catalog page HTML. For each product, extract:\\n\\n1. SKU\\n2. Product name\\n3. Image URLs\\n4. Product page URL (if available)\\n\\nReturn ONLY valid JSON array in this format:\\n[\\n  {\\n    \\\"sku\\\": \\\"string\\\",\\n    \\\"name\\\": \\\"string\\\",\\n    \\\"images\\\": [\\\"url\\\"],\\n    \\\"productUrl\\\": \\\"url\\\"\\n  }\\n]\\n\\nHTML:\\n\"\n    },\n    \"paginated\": {\n      \"systemPrompt\": \"You are a pagination detection expert. Identify pagination links in HTML.\",\n      \"userPrompt\": \"Find all pagination links (next page, page numbers) in this HTML. Return ONLY valid JSON:\\n{\\n  \\\"nextPageUrl\\\": \\\"url or null\\\",\\n  \\\"allPageUrls\\\": [\\\"url1\\\", \\\"url2\\\"]\\n}\\n\\nHTML:\\n\"\n    }\n  };\n}\n\nconst pageType = $input.item.json.pageType || 'product';\nconst prompt = prompts[pageType] || prompts.product;\n\nreturn {\n  systemPrompt: prompt.systemPrompt,\n  userPrompt: prompt.userPrompt,\n  html: $input.item.json.html,\n  url: $input.item.json.url,\n  pageType: pageType\n};"
+      },
+      "id": "load-prompts",
+      "name": "Load AI Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "truncate-html",
+              "name": "truncatedHtml",
+              "value": "={{ $json.html.substring(0, 50000) }}",
+              "type": "string"
+            },
+            {
+              "id": "full-prompt",
+              "name": "fullPrompt",
+              "value": "={{ $json.userPrompt + $json.truncatedHtml }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "prepare-prompt",
+      "name": "Prepare Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [850, 300],
+      "notes": "Truncate HTML to 50k chars to stay within Gemini limits"
+    },
+    {
+      "parameters": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleAiApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $credentials.apiKey }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ $json.fullPrompt }}\n        }\n      ]\n    }\n  ],\n  \"systemInstruction\": {\n    \"parts\": [\n      {\n        \"text\": {{ $('Load AI Prompts').item.json.systemPrompt }}\n      }\n    ]\n  },\n  \"generationConfig\": {\n    \"temperature\": 0.1,\n    \"topK\": 1,\n    \"topP\": 0.95,\n    \"maxOutputTokens\": 8192,\n    \"responseMimeType\": \"application/json\"\n  }\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "gemini-api-request",
+      "name": "Gemini API Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300],
+      "notes": "Uses Gemini 1.5 Flash for cost-effective extraction"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse Gemini response and extract JSON\nconst response = $input.item.json;\n\ntry {\n  // Extract text from Gemini response structure\n  const text = response.candidates[0].content.parts[0].text;\n  \n  // Parse the JSON response\n  let extractedData;\n  try {\n    extractedData = JSON.parse(text);\n  } catch (parseError) {\n    // Try to extract JSON from markdown code blocks\n    const jsonMatch = text.match(/```json\\s*([\\s\\S]*?)\\s*```/);\n    if (jsonMatch) {\n      extractedData = JSON.parse(jsonMatch[1]);\n    } else {\n      throw new Error('Could not parse JSON from Gemini response');\n    }\n  }\n  \n  // Validate required fields based on page type\n  const pageType = $('Load AI Prompts').item.json.pageType;\n  \n  if (pageType === 'product') {\n    if (!extractedData.sku || !extractedData.name) {\n      throw new Error('Missing required fields: sku or name');\n    }\n    \n    // Ensure arrays exist\n    extractedData.images = extractedData.images || [];\n    extractedData.videos = extractedData.videos || [];\n    extractedData.metadata = extractedData.metadata || {};\n  } else if (pageType === 'catalog') {\n    if (!Array.isArray(extractedData)) {\n      throw new Error('Catalog extraction must return an array');\n    }\n  }\n  \n  return {\n    success: true,\n    data: extractedData,\n    url: $('Load AI Prompts').item.json.url,\n    pageType: pageType,\n    extractedAt: new Date().toISOString(),\n    cost: 0.002 // Approximate cost per request\n  };\n  \n} catch (error) {\n  return {\n    success: false,\n    error: error.message,\n    url: $('Load AI Prompts').item.json.url,\n    rawResponse: response\n  };\n}"
+      },
+      "id": "parse-response",
+      "name": "Parse & Validate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-success",
+      "name": "Check Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "success-output",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "product-data",
+              "name": "productData",
+              "value": "={{ $json.data }}",
+              "type": "object"
+            },
+            {
+              "id": "url-output",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            },
+            {
+              "id": "cost-output",
+              "name": "cost",
+              "value": "={{ $json.cost }}",
+              "type": "number"
+            },
+            {
+              "id": "timestamp-output",
+              "name": "extractedAt",
+              "value": "={{ $json.extractedAt }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "format-success",
+      "name": "Format Success Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1650, 200]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "error-flag",
+              "name": "success",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "error-message",
+              "name": "error",
+              "value": "={{ $json.error }}",
+              "type": "string"
+            },
+            {
+              "id": "url-error",
+              "name": "url",
+              "value": "={{ $json.url }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "format-error",
+      "name": "Format Error Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1650, 400]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Load AI Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load AI Prompts": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini API Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini API Request": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate Response": {
+      "main": [
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Success": {
+      "main": [
+        [
+          {
+            "node": "Format Success Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:10:00.000Z",
+  "versionId": "1"
+}
+

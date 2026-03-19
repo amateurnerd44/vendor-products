@@ -1,0 +1,91 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-03-19",
+  "prompts": {
+    "product": {
+      "name": "Single Product Page Extraction",
+      "description": "Extracts product data from individual product detail pages",
+      "systemPrompt": "You are a product data extraction expert. Your task is to analyze HTML from product pages and extract structured product information. Be thorough and accurate. If a field is not found, use null or empty array as appropriate. Always return valid JSON.",
+      "userPrompt": "Extract the following information from this product page HTML:\n\n1. SKU (product code/identifier) - Look for SKU, item number, product code, model number\n2. Product name - The main product title\n3. All image URLs - Find all product images, prefer full resolution URLs\n4. All video URLs - Find any product videos or video embeds\n5. Marketing copy/description - The main product description and marketing text\n6. Additional metadata - Price, dimensions, materials, colors, sizes, weight, etc.\n\nIMPORTANT: Return ONLY valid JSON in this exact format:\n{\n  \"sku\": \"string or null\",\n  \"name\": \"string or null\",\n  \"images\": [\"url1\", \"url2\"],\n  \"videos\": [\"url1\", \"url2\"],\n  \"description\": \"string or null\",\n  \"metadata\": {\n    \"price\": \"string or null\",\n    \"dimensions\": \"string or null\",\n    \"materials\": \"string or null\",\n    \"colors\": [],\n    \"sizes\": [],\n    \"weight\": \"string or null\"\n  }\n}\n\nHTML:\n",
+      "examples": [
+        {
+          "input": "Product page with clear SKU and images",
+          "expectedOutput": {
+            "sku": "ABC-123",
+            "name": "Premium Widget",
+            "images": ["https://example.com/image1.jpg"],
+            "videos": [],
+            "description": "High quality widget for all your needs",
+            "metadata": {
+              "price": "$99.99"
+            }
+          }
+        }
+      ]
+    },
+    "catalog": {
+      "name": "Catalog Page Extraction",
+      "description": "Extracts multiple products from catalog/listing pages",
+      "systemPrompt": "You are a product catalog extraction expert. Your task is to analyze HTML from catalog or product listing pages and extract information for ALL products shown. Be thorough and extract every product you can find. Always return valid JSON array.",
+      "userPrompt": "Extract all products from this catalog page HTML. For each product found, extract:\n\n1. SKU - Product code or identifier\n2. Product name - The product title\n3. Image URLs - Product thumbnail or main image\n4. Product page URL - Link to the full product detail page (if available)\n5. Price - If visible on the catalog page\n\nIMPORTANT: Return ONLY valid JSON array in this format:\n[\n  {\n    \"sku\": \"string or null\",\n    \"name\": \"string\",\n    \"images\": [\"url\"],\n    \"productUrl\": \"url or null\",\n    \"price\": \"string or null\"\n  }\n]\n\nIf no products are found, return an empty array: []\n\nHTML:\n",
+      "examples": [
+        {
+          "input": "Catalog page with 3 products",
+          "expectedOutput": [
+            {
+              "sku": "ABC-123",
+              "name": "Product 1",
+              "images": ["https://example.com/p1.jpg"],
+              "productUrl": "https://example.com/products/abc-123",
+              "price": "$99.99"
+            }
+          ]
+        }
+      ]
+    },
+    "paginated": {
+      "name": "Pagination Detection",
+      "description": "Identifies pagination links and next page URLs",
+      "systemPrompt": "You are a pagination detection expert. Your task is to analyze HTML and find all pagination-related links, including 'next page' buttons and numbered page links. Always return valid JSON.",
+      "userPrompt": "Find all pagination links in this HTML. Look for:\n\n1. Next page URL - Link to the next page of results\n2. All page URLs - Links to specific page numbers\n3. Last page number - If detectable\n\nIMPORTANT: Return ONLY valid JSON in this format:\n{\n  \"nextPageUrl\": \"url or null\",\n  \"allPageUrls\": [\"url1\", \"url2\"],\n  \"lastPageNumber\": \"number or null\",\n  \"currentPageNumber\": \"number or null\"\n}\n\nIf no pagination is found, return:\n{\n  \"nextPageUrl\": null,\n  \"allPageUrls\": [],\n  \"lastPageNumber\": null,\n  \"currentPageNumber\": 1\n}\n\nHTML:\n",
+      "examples": [
+        {
+          "input": "Page with next button and page numbers",
+          "expectedOutput": {
+            "nextPageUrl": "https://example.com/catalog?page=2",
+            "allPageUrls": [
+              "https://example.com/catalog?page=1",
+              "https://example.com/catalog?page=2",
+              "https://example.com/catalog?page=3"
+            ],
+            "lastPageNumber": 10,
+            "currentPageNumber": 1
+          }
+        }
+      ]
+    },
+    "simple_fallback": {
+      "name": "Simple Fallback Extraction",
+      "description": "Simplified extraction when main prompts fail",
+      "systemPrompt": "You are a basic data extraction assistant. Extract whatever product information you can find, even if incomplete. Focus on finding at least a product name and one image. Always return valid JSON.",
+      "userPrompt": "Extract any product information you can find from this HTML. At minimum, try to find:\n\n1. Any product name or title\n2. At least one image URL\n3. Any text that looks like a product code or SKU\n\nReturn ONLY valid JSON:\n{\n  \"name\": \"string or null\",\n  \"images\": [],\n  \"possibleSku\": \"string or null\",\n  \"anyText\": \"string or null\"\n}\n\nHTML:\n",
+      "examples": []
+    }
+  },
+  "settings": {
+    "maxHtmlLength": 50000,
+    "temperature": 0.1,
+    "model": "gemini-1.5-flash",
+    "fallbackChain": [
+      "product",
+      "simple_fallback"
+    ]
+  },
+  "notes": [
+    "Version control: Update version number when making significant changes to prompts",
+    "Testing: Test prompts with real vendor websites before deploying",
+    "Optimization: Monitor extraction accuracy and adjust prompts as needed",
+    "Cost: Gemini 1.5 Flash is ~$0.002 per request, optimize prompt length to reduce costs"
+  ]
+}
+

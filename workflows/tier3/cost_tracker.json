@@ -1,0 +1,342 @@
+{
+  "name": "Tier 3: Cost Tracker",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "start-node",
+      "name": "When called by another workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "service-input",
+              "name": "service",
+              "value": "={{ $json.service }}",
+              "type": "string"
+            },
+            {
+              "id": "cost-input",
+              "name": "cost",
+              "value": "={{ $json.cost }}",
+              "type": "number"
+            },
+            {
+              "id": "vendor-input",
+              "name": "vendorId",
+              "value": "={{ $json.vendorId }}",
+              "type": "string"
+            },
+            {
+              "id": "url-input",
+              "name": "url",
+              "value": "={{ $json.url || null }}",
+              "type": "string"
+            },
+            {
+              "id": "operation-input",
+              "name": "operation",
+              "value": "={{ $json.operation || 'scrape' }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-variables",
+      "name": "Set Variables",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "date",
+              "name": "date",
+              "value": "={{ $now.toFormat('yyyy-MM-dd') }}",
+              "type": "string"
+            },
+            {
+              "id": "week",
+              "name": "week",
+              "value": "={{ $now.toFormat('yyyy-WW') }}",
+              "type": "string"
+            },
+            {
+              "id": "month",
+              "name": "month",
+              "value": "={{ $now.toFormat('yyyy-MM') }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "add-timestamps",
+      "name": "Add Timestamps",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataMode": "defineBelow",
+        "table": "sync_log",
+        "fieldsToSend": {
+          "fields": [
+            {
+              "fieldName": "timestamp",
+              "fieldValue": "={{ $json.timestamp }}"
+            },
+            {
+              "fieldName": "vendor_id",
+              "fieldValue": "={{ $json.vendorId }}"
+            },
+            {
+              "fieldName": "service",
+              "fieldValue": "={{ $json.service }}"
+            },
+            {
+              "fieldName": "operation",
+              "fieldValue": "={{ $json.operation }}"
+            },
+            {
+              "fieldName": "cost",
+              "fieldValue": "={{ $json.cost }}"
+            },
+            {
+              "fieldName": "url",
+              "fieldValue": "={{ $json.url }}"
+            },
+            {
+              "fieldName": "date",
+              "fieldValue": "={{ $json.date }}"
+            },
+            {
+              "fieldName": "week",
+              "fieldValue": "={{ $json.week }}"
+            },
+            {
+              "fieldName": "month",
+              "fieldValue": "={{ $json.month }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "log-cost",
+      "name": "Log Cost to Database",
+      "type": "n8n-nodes-base.n8nDataTable",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "notes": "Store cost data in sync_log table"
+    },
+    {
+      "parameters": {
+        "operation": "query",
+        "table": "sync_log",
+        "query": "=SELECT \n  date,\n  SUM(CASE WHEN service = 'zyte' THEN cost ELSE 0 END) as zyte_cost,\n  SUM(CASE WHEN service = 'gemini' THEN cost ELSE 0 END) as gemini_cost,\n  SUM(cost) as total_cost,\n  COUNT(*) as request_count\nFROM sync_log\nWHERE date >= DATE('now', '-7 days')\nGROUP BY date\nORDER BY date DESC",
+        "options": {}
+      },
+      "id": "get-weekly-costs",
+      "name": "Get Weekly Costs",
+      "type": "n8n-nodes-base.n8nDataTable",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "notes": "Query last 7 days of costs"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Calculate cost statistics\nconst items = $input.all();\n\nlet totalZyteCost = 0;\nlet totalGeminiCost = 0;\nlet totalCost = 0;\nlet totalRequests = 0;\n\nitems.forEach(item => {\n  totalZyteCost += parseFloat(item.json.zyte_cost || 0);\n  totalGeminiCost += parseFloat(item.json.gemini_cost || 0);\n  totalCost += parseFloat(item.json.total_cost || 0);\n  totalRequests += parseInt(item.json.request_count || 0);\n});\n\n// Calculate weekly projection\nconst weeklyProjection = totalCost;\n\n// Calculate annual projection\nconst annualProjection = weeklyProjection * 52;\n\n// Budget thresholds\nconst weeklyBudget = 4.26; // $4.26/week from implementation plan\nconst annualBudget = 222; // $222/year from implementation plan\n\n// Calculate percentages\nconst weeklyBudgetUsed = (totalCost / weeklyBudget) * 100;\nconst annualBudgetProjection = (annualProjection / annualBudget) * 100;\n\n// Determine alert level\nlet alertLevel = 'normal';\nif (weeklyBudgetUsed > 100) {\n  alertLevel = 'critical';\n} else if (weeklyBudgetUsed > 80) {\n  alertLevel = 'warning';\n}\n\nreturn {\n  period: 'last_7_days',\n  zyteCost: totalZyteCost.toFixed(4),\n  geminiCost: totalGeminiCost.toFixed(4),\n  totalCost: totalCost.toFixed(4),\n  totalRequests: totalRequests,\n  weeklyBudget: weeklyBudget.toFixed(2),\n  weeklyBudgetUsed: weeklyBudgetUsed.toFixed(1) + '%',\n  annualProjection: annualProjection.toFixed(2),\n  annualBudget: annualBudget.toFixed(2),\n  annualBudgetProjection: annualBudgetProjection.toFixed(1) + '%',\n  alertLevel: alertLevel,\n  averageCostPerRequest: (totalCost / totalRequests).toFixed(6),\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "calculate-stats",
+      "name": "Calculate Cost Statistics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "alert-check",
+              "leftValue": "={{ $json.alertLevel }}",
+              "rightValue": "normal",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-budget",
+      "name": "Budget Alert Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@yourdomain.com",
+        "toEmail": "admin@yourdomain.com",
+        "subject": "={{ $json.alertLevel === 'critical' ? '🚨' : '⚠️' }} Tier 3 Scraper Budget Alert",
+        "emailType": "html",
+        "message": "=<h2>{{ $json.alertLevel === 'critical' ? 'CRITICAL' : 'WARNING' }}: Budget Alert</h2>\n<p>Your Tier 3 scraper costs are {{ $json.alertLevel === 'critical' ? 'over budget' : 'approaching budget limits' }}.</p>\n\n<h3>Current Week Costs (Last 7 Days)</h3>\n<ul>\n  <li><strong>Zyte API:</strong> ${{ $json.zyteCost }}</li>\n  <li><strong>Gemini AI:</strong> ${{ $json.geminiCost }}</li>\n  <li><strong>Total:</strong> ${{ $json.totalCost }}</li>\n  <li><strong>Requests:</strong> {{ $json.totalRequests }}</li>\n  <li><strong>Avg Cost/Request:</strong> ${{ $json.averageCostPerRequest }}</li>\n</ul>\n\n<h3>Budget Status</h3>\n<ul>\n  <li><strong>Weekly Budget:</strong> ${{ $json.weeklyBudget }}</li>\n  <li><strong>Budget Used:</strong> {{ $json.weeklyBudgetUsed }}</li>\n  <li><strong>Annual Projection:</strong> ${{ $json.annualProjection }} ({{ $json.annualBudgetProjection }} of ${{ $json.annualBudget }} budget)</li>\n</ul>\n\n<p><strong>Recommendation:</strong> {{ $json.alertLevel === 'critical' ? 'Immediately review vendor configurations and reduce Tier 3 usage.' : 'Monitor costs closely and consider optimizing scraping frequency.' }}</p>\n\n<p><em>Timestamp: {{ $json.timestamp }}</em></p>",
+        "options": {}
+      },
+      "id": "send-budget-alert",
+      "name": "Send Budget Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1650, 200],
+      "notes": "Alert admin when costs exceed thresholds"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "success-flag",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "stats-output",
+              "name": "costStats",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "id": "format-output",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1650, 400]
+    }
+  ],
+  "connections": {
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Set Variables",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Variables": {
+      "main": [
+        [
+          {
+            "node": "Add Timestamps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Timestamps": {
+      "main": [
+        [
+          {
+            "node": "Log Cost to Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Cost to Database": {
+      "main": [
+        [
+          {
+            "node": "Get Weekly Costs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weekly Costs": {
+      "main": [
+        [
+          {
+            "node": "Calculate Cost Statistics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Cost Statistics": {
+      "main": [
+        [
+          {
+            "node": "Budget Alert Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Budget Alert Needed?": {
+      "main": [
+        [
+          {
+            "node": "Send Budget Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-03-19T16:10:00.000Z",
+  "versionId": "1"
+}
+
