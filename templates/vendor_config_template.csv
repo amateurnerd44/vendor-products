@@ -1,0 +1,3 @@
+vendor_id,vendor_name,data_source_type,source_url,credentials,last_sync_date,sync_status,tier_used,notes
+vendor_XXX,Vendor Company Name,drive|dropbox|sheets|shopify|website,https://example.com/path/to/data,"{""type"":""oauth2|access_token|api_key|basic_auth"",""token_or_key"":""ENCRYPTED_VALUE""}",,"pending|in_progress|success|failed","1|2|3","Additional notes about vendor, special handling, contact info, etc."
+
