@@ -1,0 +1,134 @@
+-- Vendor Configuration Template for n8n Data Tables
+-- Replace placeholders with actual vendor information
+-- 
+-- Tier Distribution:
+-- - Tier 1 (Drive/Dropbox/Sheets): 30 vendors
+-- - Tier 2 (Shopify): 20 vendors  
+-- - Tier 3 (Web Scraping): 20 vendors
+--
+-- Instructions:
+-- 1. Replace [VENDOR_NAME] with actual vendor name
+-- 2. Replace [VENDOR_SLUG] with lowercase-hyphenated version (e.g., "acme-games")
+-- 3. Replace [SOURCE_URL] with actual data source URL
+-- 4. Replace credential placeholders with actual values
+-- 5. Execute in n8n Data Tables or import via n8n interface
+
+-- ============================================
+-- TIER 1 VENDORS (30 vendors - FREE)
+-- Google Drive, Dropbox, or Google Sheets
+-- ============================================
+
+-- Tier 1 - Google Drive Vendors (10 vendors)
+INSERT INTO vendor_config (vendor_id, vendor_name, data_source_type, source_url, credentials, tier_used, fallback_to_tier3, sync_status, notes) VALUES
+('vendor-drive-01', '[VENDOR_NAME_1]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_1]', '{"drive_folder_id": "[FOLDER_ID_1]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-02', '[VENDOR_NAME_2]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_2]', '{"drive_folder_id": "[FOLDER_ID_2]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-03', '[VENDOR_NAME_3]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_3]', '{"drive_folder_id": "[FOLDER_ID_3]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-04', '[VENDOR_NAME_4]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_4]', '{"drive_folder_id": "[FOLDER_ID_4]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-05', '[VENDOR_NAME_5]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_5]', '{"drive_folder_id": "[FOLDER_ID_5]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-06', '[VENDOR_NAME_6]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_6]', '{"drive_folder_id": "[FOLDER_ID_6]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-07', '[VENDOR_NAME_7]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_7]', '{"drive_folder_id": "[FOLDER_ID_7]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-08', '[VENDOR_NAME_8]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_8]', '{"drive_folder_id": "[FOLDER_ID_8]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-09', '[VENDOR_NAME_9]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_9]', '{"drive_folder_id": "[FOLDER_ID_9]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-drive-10', '[VENDOR_NAME_10]', 'drive', '[GOOGLE_DRIVE_FOLDER_ID_10]', '{"drive_folder_id": "[FOLDER_ID_10]", "oauth_credential": "Google Drive - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details');
+
+-- Tier 1 - Dropbox Vendors (10 vendors)
+INSERT INTO vendor_config (vendor_id, vendor_name, data_source_type, source_url, credentials, tier_used, fallback_to_tier3, sync_status, notes) VALUES
+('vendor-dropbox-01', '[VENDOR_NAME_11]', 'dropbox', '[DROPBOX_FOLDER_PATH_1]', '{"dropbox_path": "[PATH_1]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-02', '[VENDOR_NAME_12]', 'dropbox', '[DROPBOX_FOLDER_PATH_2]', '{"dropbox_path": "[PATH_2]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-03', '[VENDOR_NAME_13]', 'dropbox', '[DROPBOX_FOLDER_PATH_3]', '{"dropbox_path": "[PATH_3]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-04', '[VENDOR_NAME_14]', 'dropbox', '[DROPBOX_FOLDER_PATH_4]', '{"dropbox_path": "[PATH_4]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-05', '[VENDOR_NAME_15]', 'dropbox', '[DROPBOX_FOLDER_PATH_5]', '{"dropbox_path": "[PATH_5]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-06', '[VENDOR_NAME_16]', 'dropbox', '[DROPBOX_FOLDER_PATH_6]', '{"dropbox_path": "[PATH_6]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-07', '[VENDOR_NAME_17]', 'dropbox', '[DROPBOX_FOLDER_PATH_7]', '{"dropbox_path": "[PATH_7]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-08', '[VENDOR_NAME_18]', 'dropbox', '[DROPBOX_FOLDER_PATH_8]', '{"dropbox_path": "[PATH_8]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-09', '[VENDOR_NAME_19]', 'dropbox', '[DROPBOX_FOLDER_PATH_9]', '{"dropbox_path": "[PATH_9]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-dropbox-10', '[VENDOR_NAME_20]', 'dropbox', '[DROPBOX_FOLDER_PATH_10]', '{"dropbox_path": "[PATH_10]", "oauth_credential": "Dropbox - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details');
+
+-- Tier 1 - Google Sheets Vendors (10 vendors)
+INSERT INTO vendor_config (vendor_id, vendor_name, data_source_type, source_url, credentials, tier_used, fallback_to_tier3, sync_status, notes) VALUES
+('vendor-sheets-01', '[VENDOR_NAME_21]', 'sheets', '[GOOGLE_SHEET_ID_1]', '{"sheet_id": "[SHEET_ID_1]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-02', '[VENDOR_NAME_22]', 'sheets', '[GOOGLE_SHEET_ID_2]', '{"sheet_id": "[SHEET_ID_2]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-03', '[VENDOR_NAME_23]', 'sheets', '[GOOGLE_SHEET_ID_3]', '{"sheet_id": "[SHEET_ID_3]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-04', '[VENDOR_NAME_24]', 'sheets', '[GOOGLE_SHEET_ID_4]', '{"sheet_id": "[SHEET_ID_4]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-05', '[VENDOR_NAME_25]', 'sheets', '[GOOGLE_SHEET_ID_5]', '{"sheet_id": "[SHEET_ID_5]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-06', '[VENDOR_NAME_26]', 'sheets', '[GOOGLE_SHEET_ID_6]', '{"sheet_id": "[SHEET_ID_6]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-07', '[VENDOR_NAME_27]', 'sheets', '[GOOGLE_SHEET_ID_7]', '{"sheet_id": "[SHEET_ID_7]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-08', '[VENDOR_NAME_28]', 'sheets', '[GOOGLE_SHEET_ID_8]', '{"sheet_id": "[SHEET_ID_8]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-09', '[VENDOR_NAME_29]', 'sheets', '[GOOGLE_SHEET_ID_9]', '{"sheet_id": "[SHEET_ID_9]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details'),
+('vendor-sheets-10', '[VENDOR_NAME_30]', 'sheets', '[GOOGLE_SHEET_ID_10]', '{"sheet_id": "[SHEET_ID_10]", "oauth_credential": "Google Sheets - Vendor Sync"}', 1, false, 'pending', 'Replace with actual vendor details');
+
+-- ============================================
+-- TIER 2 VENDORS (20 vendors - FREE)
+-- Shopify Stores
+-- ============================================
+
+INSERT INTO vendor_config (vendor_id, vendor_name, data_source_type, source_url, credentials, tier_used, fallback_to_tier3, sync_status, notes) VALUES
+('vendor-shopify-01', '[VENDOR_NAME_31]', 'shopify', 'https://[SHOPIFY_STORE_1].myshopify.com', '{"shopify_domain": "[STORE_1].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-02', '[VENDOR_NAME_32]', 'shopify', 'https://[SHOPIFY_STORE_2].myshopify.com', '{"shopify_domain": "[STORE_2].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-03', '[VENDOR_NAME_33]', 'shopify', 'https://[SHOPIFY_STORE_3].myshopify.com', '{"shopify_domain": "[STORE_3].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-04', '[VENDOR_NAME_34]', 'shopify', 'https://[SHOPIFY_STORE_4].myshopify.com', '{"shopify_domain": "[STORE_4].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-05', '[VENDOR_NAME_35]', 'shopify', 'https://[SHOPIFY_STORE_5].myshopify.com', '{"shopify_domain": "[STORE_5].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-06', '[VENDOR_NAME_36]', 'shopify', 'https://[SHOPIFY_STORE_6].myshopify.com', '{"shopify_domain": "[STORE_6].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-07', '[VENDOR_NAME_37]', 'shopify', 'https://[SHOPIFY_STORE_7].myshopify.com', '{"shopify_domain": "[STORE_7].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-08', '[VENDOR_NAME_38]', 'shopify', 'https://[SHOPIFY_STORE_8].myshopify.com', '{"shopify_domain": "[STORE_8].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-09', '[VENDOR_NAME_39]', 'shopify', 'https://[SHOPIFY_STORE_9].myshopify.com', '{"shopify_domain": "[STORE_9].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-10', '[VENDOR_NAME_40]', 'shopify', 'https://[SHOPIFY_STORE_10].myshopify.com', '{"shopify_domain": "[STORE_10].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-11', '[VENDOR_NAME_41]', 'shopify', 'https://[SHOPIFY_STORE_11].myshopify.com', '{"shopify_domain": "[STORE_11].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-12', '[VENDOR_NAME_42]', 'shopify', 'https://[SHOPIFY_STORE_12].myshopify.com', '{"shopify_domain": "[STORE_12].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-13', '[VENDOR_NAME_43]', 'shopify', 'https://[SHOPIFY_STORE_13].myshopify.com', '{"shopify_domain": "[STORE_13].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-14', '[VENDOR_NAME_44]', 'shopify', 'https://[SHOPIFY_STORE_14].myshopify.com', '{"shopify_domain": "[STORE_14].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-15', '[VENDOR_NAME_45]', 'shopify', 'https://[SHOPIFY_STORE_15].myshopify.com', '{"shopify_domain": "[STORE_15].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-16', '[VENDOR_NAME_46]', 'shopify', 'https://[SHOPIFY_STORE_16].myshopify.com', '{"shopify_domain": "[STORE_16].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-17', '[VENDOR_NAME_47]', 'shopify', 'https://[SHOPIFY_STORE_17].myshopify.com', '{"shopify_domain": "[STORE_17].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-18', '[VENDOR_NAME_48]', 'shopify', 'https://[SHOPIFY_STORE_18].myshopify.com', '{"shopify_domain": "[STORE_18].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-19', '[VENDOR_NAME_49]', 'shopify', 'https://[SHOPIFY_STORE_19].myshopify.com', '{"shopify_domain": "[STORE_19].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain'),
+('vendor-shopify-20', '[VENDOR_NAME_50]', 'shopify', 'https://[SHOPIFY_STORE_20].myshopify.com', '{"shopify_domain": "[STORE_20].myshopify.com"}', 2, true, 'pending', 'Replace with actual Shopify store domain');
+
+-- ============================================
+-- TIER 3 VENDORS (20 vendors - PAID ~$4.26/week each)
+-- Web Scraping with Zyte + Gemini AI
+-- ============================================
+
+INSERT INTO vendor_config (vendor_id, vendor_name, data_source_type, source_url, credentials, tier_used, fallback_to_tier3, sync_status, notes) VALUES
+('vendor-website-01', '[VENDOR_NAME_51]', 'website', 'https://[VENDOR_WEBSITE_1].com/products', '{"website_url": "https://[WEBSITE_1].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-02', '[VENDOR_NAME_52]', 'website', 'https://[VENDOR_WEBSITE_2].com/products', '{"website_url": "https://[WEBSITE_2].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-03', '[VENDOR_NAME_53]', 'website', 'https://[VENDOR_WEBSITE_3].com/products', '{"website_url": "https://[WEBSITE_3].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-04', '[VENDOR_NAME_54]', 'website', 'https://[VENDOR_WEBSITE_4].com/products', '{"website_url": "https://[WEBSITE_4].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-05', '[VENDOR_NAME_55]', 'website', 'https://[VENDOR_WEBSITE_5].com/products', '{"website_url": "https://[WEBSITE_5].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-06', '[VENDOR_NAME_56]', 'website', 'https://[VENDOR_WEBSITE_6].com/products', '{"website_url": "https://[WEBSITE_6].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-07', '[VENDOR_NAME_57]', 'website', 'https://[VENDOR_WEBSITE_7].com/products', '{"website_url": "https://[WEBSITE_7].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-08', '[VENDOR_NAME_58]', 'website', 'https://[VENDOR_WEBSITE_8].com/products', '{"website_url": "https://[WEBSITE_8].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-09', '[VENDOR_NAME_59]', 'website', 'https://[VENDOR_WEBSITE_9].com/products', '{"website_url": "https://[WEBSITE_9].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-10', '[VENDOR_NAME_60]', 'website', 'https://[VENDOR_WEBSITE_10].com/products', '{"website_url": "https://[WEBSITE_10].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-11', '[VENDOR_NAME_61]', 'website', 'https://[VENDOR_WEBSITE_11].com/products', '{"website_url": "https://[WEBSITE_11].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-12', '[VENDOR_NAME_62]', 'website', 'https://[VENDOR_WEBSITE_12].com/products', '{"website_url": "https://[WEBSITE_12].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-13', '[VENDOR_NAME_63]', 'website', 'https://[VENDOR_WEBSITE_13].com/products', '{"website_url": "https://[WEBSITE_13].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-14', '[VENDOR_NAME_64]', 'website', 'https://[VENDOR_WEBSITE_14].com/products', '{"website_url": "https://[WEBSITE_14].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-15', '[VENDOR_NAME_65]', 'website', 'https://[VENDOR_WEBSITE_15].com/products', '{"website_url": "https://[WEBSITE_15].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-16', '[VENDOR_NAME_66]', 'website', 'https://[VENDOR_WEBSITE_16].com/products', '{"website_url": "https://[WEBSITE_16].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-17', '[VENDOR_NAME_67]', 'website', 'https://[VENDOR_WEBSITE_17].com/products', '{"website_url": "https://[WEBSITE_17].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-18', '[VENDOR_NAME_68]', 'website', 'https://[VENDOR_WEBSITE_18].com/products', '{"website_url": "https://[WEBSITE_18].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-19', '[VENDOR_NAME_69]', 'website', 'https://[VENDOR_WEBSITE_19].com/products', '{"website_url": "https://[WEBSITE_19].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL'),
+('vendor-website-20', '[VENDOR_NAME_70]', 'website', 'https://[VENDOR_WEBSITE_20].com/products', '{"website_url": "https://[WEBSITE_20].com/products", "zyte_credential": "Zyte API", "gemini_credential": "Gemini API"}', 3, false, 'pending', 'Replace with actual website URL');
+
+-- ============================================
+-- VERIFICATION QUERIES
+-- ============================================
+
+-- Check vendor count by tier
+SELECT tier_used, COUNT(*) as vendor_count
+FROM vendor_config
+GROUP BY tier_used;
+
+-- Expected output:
+-- tier_used | vendor_count
+-- ----------|-------------
+--     1     |     30
+--     2     |     20
+--     3     |     20
+
+-- List all vendors
+SELECT vendor_id, vendor_name, data_source_type, tier_used, sync_status
+FROM vendor_config
+ORDER BY tier_used, vendor_id;
+
